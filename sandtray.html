@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>社区沙盘 - 稳定最终修复版</title>
+    <title>社区沙盘 - 协作联动终极版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
@@ -25,7 +25,6 @@
             box-shadow: 0 40px 100px rgba(0,0,0,0.05); overflow: hidden;
         }
 
-        /* 玩家区域 */
         .ui-zone {
             position: absolute; left: 0; width: 100%; height: 38%;
             z-index: 100; padding: 15px; display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -45,25 +44,16 @@
             border-radius: 30px; backdrop-filter: blur(8px);
         }
         .spinner { width: 32px; height: 32px; border: 3.5px solid #F0F0F0; border-top: 3.5px solid var(--primary-green); border-radius: 50%; animation: spin 1.2s linear infinite; margin-bottom: 12px; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
 
         /* 沙盘引导页 - 缩小 0.6 倍 */
         .tutorial-layer {
             position: absolute; inset: 0; background: rgba(255,255,255,0.9); z-index: 800;
             display: none; flex-direction: column; align-items: center; justify-content: center; padding: 15px;
         }
-        .tut-content { transform: scale(0.7); display: flex; flex-direction: column; align-items: center; text-align: center; }
+        .tut-content { transform: scale(0.65); display: flex; flex-direction: column; align-items: center; text-align: center; }
 
-        /* 分类选择按钮 */
-        .cat-btn {
-            width: 100px; height: 125px; border-radius: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center;
-            font-weight: 900; font-size: 0.75rem; cursor: pointer; transition: all 0.3s;
-            background: #FDFDFD; color: var(--light-grey); border: 2px solid #F3F3F3;
-        }
-        .cat-btn.selected { border-color: var(--primary-green); background: #F4F9F8; color: var(--primary-green); }
-        .cat-btn.locked { opacity: 0.15; pointer-events: none; }
-
-        /* 任务气泡 */
+        /* 气泡任务项 */
         .item-orb {
             aspect-ratio: 1; border-radius: 50%; background: white;
             display: flex; align-items: center; justify-content: center;
@@ -86,10 +76,7 @@
         .canvas-wrap { flex-grow: 1; width: 100%; margin: 8px 0; min-height: 0; background: #FAFAFA; border-radius: 20px; border: 1px solid #F0F0F0; overflow: hidden; }
         canvas { width: 100%; height: 100%; touch-action: none; display: block; }
 
-        .tool-bar { width: 100%; padding: 5px 0; flex-shrink: 0; display: flex; flex-direction: column; gap: 12px; }
-        .abandon-link { text-align: center; color: #CCC; font-size: 0.65rem; font-weight: bold; cursor: pointer; margin-bottom: 5px; }
-
-        /* 素材栏 */
+        /* Minecraft 风格缩小素材栏 */
         .inv-bar {
             position: absolute; left: 15px; right: 15px; height: 60px;
             background: transparent; display: none; align-items: flex-end; 
@@ -151,7 +138,7 @@
             </div>
             <div class="canvas-wrap"><canvas id="canvas-p2"></canvas></div>
             <div class="tool-bar"><input type="range" class="color-slider" min="0" max="360" value="180" oninput="updatePen('p2','h',this.value)"><input type="range" min="1" max="12" value="3" oninput="updatePen('p2','s',this.value)"></div>
-            <div class="abandon-link" onclick="closeDraw('p2')">放弃绘画</div>
+            <div class="text-[0.6rem] font-bold text-stone-200 text-center pb-1" onclick="closeDraw('p2')">放弃本次绘画</div>
         </div>
     </div>
 
@@ -187,11 +174,11 @@
             </div>
             <div class="canvas-wrap"><canvas id="canvas-p1"></canvas></div>
             <div class="tool-bar"><input type="range" class="color-slider" min="0" max="360" value="180" oninput="updatePen('p1','h',this.value)"><input type="range" min="1" max="12" value="3" oninput="updatePen('p1','s',this.value)"></div>
-            <div class="abandon-link" onclick="closeDraw('p1')">放弃绘画</div>
+            <div class="text-[0.6rem] font-bold text-stone-200 text-center pb-1" onclick="closeDraw('p1')">放弃本次绘画</div>
         </div>
     </div>
 
-    <!-- 素材栏 -->
+    <!-- 迷你素材栏 -->
     <div id="p2-inv" class="inv-bar p2-pos" style="top:15px;"></div>
     <div id="p1-inv" class="inv-bar p1-pos" style="bottom:15px;"></div>
 </div>
@@ -261,49 +248,33 @@
     Object.keys(canvases).forEach(p => {
         const cvs = canvases[p];
         const ctx = ctxs[p];
-        
         const getXY = (e) => {
             const r = cvs.getBoundingClientRect();
-            const clientX = e.clientX || (e.touches && e.touches[0].clientX);
-            const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+            const clientX = e.clientX || e.touches[0].clientX;
+            const clientY = e.clientY || e.touches[0].clientY;
             // P2 镜像坐标修复
             if(p === 'p2') return { x: r.right - clientX, y: r.bottom - clientY };
             return { x: clientX - r.left, y: clientY - r.top };
         };
-
-        const startDraw = (e) => {
-            e.preventDefault();
-            saveHistory(p);
-            brush[p].active = true;
+        cvs.addEventListener('pointerdown', (e) => {
+            saveHistory(p); brush[p].active = true;
             ctx.strokeStyle = `hsl(${brush[p].h}, 60%, 45%)`;
             ctx.lineWidth = brush[p].s;
             ctx.lineCap = "round"; ctx.lineJoin = "round";
-            const pos = getXY(e);
-            ctx.beginPath();
-            ctx.moveTo(pos.x, pos.y);
+            const pos = getXY(e); ctx.beginPath(); ctx.moveTo(pos.x, pos.y);
             cvs.setPointerCapture(e.pointerId || 1);
-        };
-
-        const moveDraw = (e) => {
+        });
+        cvs.addEventListener('pointermove', (e) => {
             if(!brush[p].active) return;
-            const pos = getXY(e);
-            ctx.lineTo(pos.x, pos.y);
-            ctx.stroke();
-        };
-
-        const endDraw = () => { brush[p].active = false; };
-
-        cvs.addEventListener('pointerdown', startDraw, { passive: false });
-        cvs.addEventListener('pointermove', moveDraw, { passive: false });
-        cvs.addEventListener('pointerup', endDraw);
-        cvs.addEventListener('pointercancel', endDraw);
+            const pos = getXY(e); ctx.lineTo(pos.x, pos.y); ctx.stroke();
+        });
+        cvs.addEventListener('pointerup', (e) => { brush[p].active = false; });
     });
 
     function openDraw(p, name) {
         syncState[p].activeItem = name;
         document.getElementById(`${p}-draw-title`).innerText = name;
         document.getElementById(`${p}-modal`).style.display = 'flex';
-        // 关键：延迟确保 Modal 布局完成
         setTimeout(() => {
             const cvs = canvases[p];
             const wrap = cvs.parentElement;
@@ -397,18 +368,77 @@
         });
     }
 
+    // --- 同步联动核心代码：开始 ---
+
+    // 1. 生成带有唯一 ID 的物品
     function spawn(url, p) {
         const img = document.createElement('img');
         img.src = url; img.className = 'entity';
-        img.style.left = '40%'; img.style.top = p === 'p1' ? '75%' : '15%';
-        img.dataset.scale = 1; img.dataset.rotate = 0;
+        
+        // 分配唯一 ID
+        const uniqueId = 'ent-' + Date.now() + '-' + Math.floor(Math.random()*1000);
+        img.id = uniqueId;
+
+        // 初始位置
+        img.style.left = '40%'; 
+        img.style.top = p === 'p1' ? '75%' : '15%';
+        img.dataset.scale = 1; 
+        img.dataset.rotate = 0;
+        
         document.getElementById('sandbox-world').appendChild(img);
         attachSmartGestures(img);
+
+        // 初始化时也同步一次（让对面也生成这个物品）
+        // 注意：为防止无限循环，只有本地点击生成的才发送同步指令
+        syncToParent(img);
     }
+
+    // 2. 发送动作给 index.html
+    function syncToParent(el) {
+        window.parent.postMessage({
+            type: 'GAME_SYNC',
+            payload: {
+                id: el.id,
+                src: el.src, // 包含图片数据，确保对面也能生成
+                x: el.style.left,
+                y: el.style.top,
+                scale: el.dataset.scale || 1,
+                rotate: el.dataset.rotate || 0
+            }
+        }, '*');
+    }
+
+    // 3. 接收来自另一屏的指令并应用
+    window.addEventListener('message', (e) => {
+        if (e.data.type === 'APPLY_SYNC') {
+            const { id, src, x, y, scale, rotate } = e.data.data;
+            let target = document.getElementById(id);
+            
+            // 如果本地还没这个物体，就创建一个
+            if (!target) {
+                target = document.createElement('img');
+                target.id = id;
+                target.src = src;
+                target.className = 'entity';
+                document.getElementById('sandbox-world').appendChild(target);
+                attachSmartGestures(target);
+            }
+
+            // 更新位置和变换
+            target.style.left = x;
+            target.style.top = y;
+            target.dataset.scale = scale;
+            target.dataset.rotate = rotate;
+            target.style.transform = `scale(${scale}) rotate(${rotate}deg)`;
+        }
+    });
+
+    // --- 同步联动核心代码：结束 ---
 
     function attachSmartGestures(el) {
         let activePointers = {};
         let initialDist = 0, initialAngle = 0, startScale = 1, startRotation = 0;
+        
         el.addEventListener('pointerdown', (e) => {
             e.preventDefault(); activePointers[e.pointerId] = e;
             el.setPointerCapture(e.pointerId); el.style.zIndex = 1000;
@@ -420,15 +450,19 @@
                 startScale = parseFloat(el.dataset.scale); startRotation = parseFloat(el.dataset.rotate);
             }
         });
+
         el.addEventListener('pointermove', (e) => {
             if (!activePointers[e.pointerId]) return;
             activePointers[e.pointerId] = e;
             const keys = Object.keys(activePointers);
+            
             if (keys.length === 1) {
+                // 单指拖拽
                 const parentRect = document.getElementById('tablet-stage').getBoundingClientRect();
                 el.style.left = (e.clientX - parentRect.left - 40) + 'px';
                 el.style.top = (e.clientY - parentRect.top - 40) + 'px';
             } else if (keys.length === 2) {
+                // 双指缩放/旋转
                 const p1 = activePointers[keys[0]], p2 = activePointers[keys[1]];
                 const currentDist = Math.hypot(p1.clientX - p2.clientX, p1.clientY - p2.clientY);
                 const currentAngle = Math.atan2(p2.clientY - p1.clientY, p2.clientX - p1.clientX);
@@ -437,7 +471,11 @@
                 el.dataset.scale = newScale; el.dataset.rotate = newRotation;
                 el.style.transform = `scale(${newScale}) rotate(${newRotation}deg)`;
             }
+
+            // 重要：任何变动都同步给邻居
+            syncToParent(el);
         });
+
         el.addEventListener('pointerup', (e) => {
             delete activePointers[e.pointerId];
             if (Object.keys(activePointers).length === 0) el.style.zIndex = 10;
