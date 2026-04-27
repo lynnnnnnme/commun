@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>智慧终端 - 协作增强版</title>
+    <title>智慧终端 - 协同版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
@@ -44,7 +44,6 @@
         .color-card:active { transform: scale(0.96); }
         .card-icon { width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; color: white; }
 
-        /* 修复偏移：200% 宽度/高度，精准对齐 */
         #game-frame-wrap { position: absolute; inset: 0; overflow: hidden; display: none; background: white; }
         #game-frame { border: none; position: absolute; top: 0; height: 100%; }
         
@@ -57,6 +56,7 @@
         @keyframes spin { 100% { transform: rotate(360deg); } }
 
         #init-layer, #setup-layer { position: fixed; inset: 0; background: #E8F1EE; z-index: 9000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        #setup-layer { z-index: 8000; display: none; }
         .btn-ready { background: var(--primary-green); color: white; padding: 14px 50px; border-radius: 50px; font-weight: 900; font-size: 1rem; border: none; cursor: pointer; }
         
         .reset-link { margin-top: 20px; font-size: 0.65rem; font-weight: 900; color: #BBB; text-decoration: underline; cursor: pointer; }
@@ -70,13 +70,12 @@
         <button onclick="startSystem()" class="btn-ready">开启</button>
     </div>
 
-    <div id="setup-layer" style="display:none;">
+    <div id="setup-layer">
         <h2 class="text-lg font-black mb-10 text-stone-500">此屏幕的位置是？</h2>
         <div class="flex flex-col gap-4 w-64">
             <button onclick="saveSide('left')" class="btn-ready">左侧屏</button>
             <button onclick="saveSide('right')" class="btn-ready" style="background:#7B8A8E">右侧屏</button>
         </div>
-        <p class="mt-8 text-[0.6rem] text-stone-400 px-10 text-center">左屏将作为信号发起端，右屏自动跟随</p>
     </div>
 
     <div id="main-stage" class="ratio-single">
@@ -84,11 +83,10 @@
 
         <div id="sync-wait" class="sync-wait-layer">
             <div class="spinner mb-6"></div>
-            <p id="wait-msg" class="text-sm font-black text-stone-500">正在寻找邻居屏幕...</p>
-            <button onclick="cancelLaunch()" class="mt-8 text-xs font-bold text-stone-300 underline">取消</button>
+            <p id="wait-msg" class="text-sm font-black text-stone-500 text-center px-10">正在寻找邻居屏幕...</p>
+            <button onclick="cancelLaunch()" class="mt-8 text-xs font-bold text-stone-300 underline">取消联机</button>
         </div>
 
-        <!-- 单人模式菜单 -->
         <div id="view-single" class="view-section active-view">
             <h2 class="font-black mb-8 text-stone-300 tracking-[0.3em] text-[0.65rem]">个人探索模式</h2>
             <div class="color-card" onclick="launch('single-htp')" style="border-bottom: 5px solid var(--pink)">
@@ -102,7 +100,6 @@
             <div class="reset-link" onclick="resetSetup()">重新校准屏幕位置</div>
         </div>
 
-        <!-- 双人模式菜单 -->
         <div id="view-double" class="view-section">
             <h2 class="font-black mb-8 text-stone-400 tracking-[0.3em] text-[0.65rem]">双人协作空间</h2>
             <div class="color-card" onclick="launchDouble('double-cards')" style="border-bottom: 5px solid var(--green)">
@@ -133,6 +130,7 @@
         let currentMode = 'single';
         let isRunning = false;
         let peer = null, conn = null;
+        let connectInterval = null;
 
         function startSystem() {
             document.getElementById('init-layer').style.display = 'none';
@@ -188,53 +186,59 @@
             document.getElementById('manual-toggle').style.display = isRunning ? 'none' : 'flex';
         }
 
-        // --- 强化版联机逻辑 ---
+        // --- 协作逻辑：双向主动连接 ---
         function launchDouble(gameId) {
             document.getElementById('sync-wait').style.display = 'flex';
             document.getElementById('wait-msg').innerText = "正在寻找邻居屏幕...";
-            startNetwork(gameId);
+            initPeerConnection(gameId);
         }
 
-        function startNetwork(gameId) {
+        function initPeerConnection(gameId) {
             if (peer) peer.destroy();
             
-            // 使用更复杂的 ID 避免冲突
-            peer = new Peer(`tm-link-v10-${mySide}`);
-            
+            // 每一个会话生成一个微小的随机后缀，防止 ID 冲突死锁
+            const sessionSuffix = Math.floor(Math.random() * 99);
+            const myPeerId = `tm-v11-${mySide}`;
+            const targetPeerId = `tm-v11-${mySide === 'left' ? 'right' : 'left'}`;
+
+            peer = new Peer(myPeerId);
+
             peer.on('open', (id) => {
-                console.log("My Peer ID:", id);
-                // 如果是左屏，尝试连接右屏；如果是右屏，等待连接或主动探测
-                const target = mySide === 'left' ? 'tm-link-v10-right' : 'tm-link-v10-left';
-                
-                const connector = setInterval(() => {
-                    if (conn || !peer || peer.destroyed) { clearInterval(connector); return; }
-                    
-                    document.getElementById('wait-msg').innerText = `正在探测: ${target}`;
-                    conn = peer.connect(target);
-                    if(conn) setupConn(gameId);
+                console.log("Local ID:", id);
+                // 开启高频双向尝试
+                if (connectInterval) clearInterval(connectInterval);
+                connectInterval = setInterval(() => {
+                    if (conn || !peer || peer.destroyed) return;
+                    document.getElementById('wait-msg').innerText = `正在搜寻邻居: ${targetPeerId}`;
+                    const attempt = peer.connect(targetPeerId, { reliable: true });
+                    setupConnHandlers(attempt, gameId);
                 }, 2000);
             });
 
             peer.on('connection', (c) => {
-                if (conn) return;
+                if (conn) return; // 已经连上了
                 conn = c;
-                setupConn(gameId);
+                setupConnHandlers(c, gameId);
             });
 
             peer.on('error', (err) => {
-                console.error("PeerJS Error:", err.type);
-                if(err.type === 'peer-unavailable') {
-                    // 对方没上线，继续等
+                if (err.type === 'unavailable-id') {
+                    // 如果 ID 被占用，尝试稍微等待重连
+                    setTimeout(() => initPeerConnection(gameId), 3000);
                 }
             });
         }
 
-        function setupConn(gameId) {
-            conn.on('open', () => {
-                document.getElementById('wait-msg').innerText = "联机成功！正在同步画面...";
+        function setupConnHandlers(connection, gameId) {
+            connection.on('open', () => {
+                if (connectInterval) clearInterval(connectInterval);
+                conn = connection;
+                document.getElementById('wait-msg').innerText = "已成功握手，开启空间...";
                 if (gameId) conn.send({ type: 'LAUNCH', gameId: gameId });
+                updateUI();
             });
-            conn.on('data', (data) => {
+
+            connection.on('data', (data) => {
                 if (data.type === 'LAUNCH') doLaunch(data.gameId);
                 if (data.type === 'EXIT') doExit();
                 if (data.type === 'SYNC') {
@@ -242,17 +246,21 @@
                     frame.postMessage({ type: 'APPLY_SYNC', data: data.payload }, '*');
                 }
             });
-            conn.on('close', () => { conn = null; updateUI(); });
+
+            connection.on('close', () => {
+                conn = null;
+                if (!isRunning) launchDouble(); // 断开重连
+            });
         }
 
-        // 监听来自 Iframe 的同步请求
         window.addEventListener('message', (e) => {
-            if (e.data.type === 'GAME_SYNC' && conn) {
+            if (e.data.type === 'GAME_SYNC' && conn && conn.open) {
                 conn.send({ type: 'SYNC', payload: e.data.payload });
             }
         });
 
         function cancelLaunch() {
+            if (connectInterval) clearInterval(connectInterval);
             document.getElementById('sync-wait').style.display = 'none';
             if (peer) { peer.destroy(); peer = null; }
             conn = null;
@@ -274,7 +282,6 @@
             frame.src = urls[gameId];
             document.getElementById('game-runtime').style.display = 'block';
             wrap.className = (currentMode === 'single' ? 'mode-single-active' : 'mode-double-active') + ` side-${mySide}`;
-            updateUI();
         }
 
         function exitGame() {
