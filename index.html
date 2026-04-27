@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>智慧终端 - 协同版</title>
+    <title>社区时光机 - 智慧终端</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
@@ -42,23 +42,19 @@
             cursor: pointer; display: flex; flex-direction: column; align-items: center;
         }
         .color-card:active { transform: scale(0.96); }
-        .card-icon { width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; color: white; }
 
         #game-frame-wrap { position: absolute; inset: 0; overflow: hidden; display: none; background: white; }
         #game-frame { border: none; position: absolute; top: 0; height: 100%; }
-        
         .mode-single-active #game-frame { width: 100%; left: 0; }
-        .mode-double-active.side-left #game-frame { width: 200%; left: 0; }
-        .mode-double-active.side-right #game-frame { width: 200%; left: -100%; }
+        .mode-double-active.side-top #game-frame { width: 200%; left: 0; }
+        .mode-double-active.side-bottom #game-frame { width: 200%; left: -100%; }
 
         .sync-wait-layer { position: absolute; inset: 0; background: rgba(255,255,255,0.98); z-index: 1500; display: none; flex-direction: column; align-items: center; justify-content: center; }
         .spinner { width: 40px; height: 40px; border: 4px solid #F0F0F0; border-top: 4px solid var(--primary-green); border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
 
         #init-layer, #setup-layer { position: fixed; inset: 0; background: #E8F1EE; z-index: 9000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        #setup-layer { z-index: 8000; display: none; }
         .btn-ready { background: var(--primary-green); color: white; padding: 14px 50px; border-radius: 50px; font-weight: 900; font-size: 1rem; border: none; cursor: pointer; }
-        
         .reset-link { margin-top: 20px; font-size: 0.65rem; font-weight: 900; color: #BBB; text-decoration: underline; cursor: pointer; }
     </style>
 </head>
@@ -66,48 +62,48 @@
 
     <div id="init-layer">
         <div class="mb-8 text-[#8DB5AA] animate-pulse"><i data-lucide="power" size="52"></i></div>
-        <h1 class="text-xl font-black mb-10 tracking-[0.2em]">智慧终端已就绪</h1>
-        <button onclick="startSystem()" class="btn-ready">开启</button>
+        <button onclick="startSystem()" class="btn-ready">开启终端</button>
     </div>
 
-    <div id="setup-layer">
+    <div id="setup-layer" style="display:none;">
         <h2 class="text-lg font-black mb-10 text-stone-500">此屏幕的位置是？</h2>
         <div class="flex flex-col gap-4 w-64">
-            <button onclick="saveSide('left')" class="btn-ready">左侧屏</button>
-            <button onclick="saveSide('right')" class="btn-ready" style="background:#7B8A8E">右侧屏</button>
+            <button onclick="saveSide('top')" class="btn-ready">左/上半屏 (P2侧)</button>
+            <button onclick="saveSide('bottom')" class="btn-ready" style="background:#7B8A8E">右/下半屏 (P1侧)</button>
         </div>
+        <p class="mt-8 text-[0.6rem] text-stone-400 text-center px-10 leading-relaxed">角色分配后将实现自动联机<br>建议两台设备连接同一 Wi-Fi</p>
     </div>
 
     <div id="main-stage" class="ratio-single">
         <div id="manual-toggle" onclick="toggleModeManual()"><i data-lucide="refresh-cw"></i></div>
 
+        <!-- 联机等待层 -->
         <div id="sync-wait" class="sync-wait-layer">
             <div class="spinner mb-6"></div>
-            <p id="wait-msg" class="text-sm font-black text-stone-500 text-center px-10">正在寻找邻居屏幕...</p>
-            <button onclick="cancelLaunch()" class="mt-8 text-xs font-bold text-stone-300 underline">取消联机</button>
+            <p id="wait-msg" class="text-sm font-black text-stone-500">正在与邻居同步画面...</p>
+            <p id="debug-id" class="mt-4 text-[10px] font-mono text-stone-300"></p>
+            <button onclick="cancelLaunch()" class="mt-8 text-xs font-bold text-stone-300 underline">取消</button>
         </div>
 
+        <!-- 单人模式 -->
         <div id="view-single" class="view-section active-view">
             <h2 class="font-black mb-8 text-stone-300 tracking-[0.3em] text-[0.65rem]">个人探索模式</h2>
             <div class="color-card" onclick="launch('single-htp')" style="border-bottom: 5px solid var(--pink)">
-                <div class="card-icon" style="background:var(--pink)"><i data-lucide="palette" size="20"></i></div>
                 <p class="font-black text-sm">房树人心理绘测</p>
             </div>
             <div class="color-card" onclick="launch('single-book')" style="border-bottom: 5px solid var(--blue)">
-                <div class="card-icon" style="background:var(--blue)"><i data-lucide="book-open" size="20"></i></div>
                 <p class="font-black text-sm">社区答案之书</p>
             </div>
             <div class="reset-link" onclick="resetSetup()">重新校准屏幕位置</div>
         </div>
 
+        <!-- 双人模式 -->
         <div id="view-double" class="view-section">
             <h2 class="font-black mb-8 text-stone-400 tracking-[0.3em] text-[0.65rem]">双人协作空间</h2>
             <div class="color-card" onclick="launchDouble('double-cards')" style="border-bottom: 5px solid var(--green)">
-                <div class="card-icon" style="background:var(--green)"><i data-lucide="brain" size="20"></i></div>
                 <p class="font-black text-sm">凑十记忆挑战</p>
             </div>
             <div class="color-card" onclick="launchDouble('double-sand')" style="border-bottom: 5px solid var(--yellow)">
-                <div class="card-icon" style="background:var(--yellow); color:#888"><i data-lucide="layout-grid" size="20"></i></div>
                 <p class="font-black text-sm">社区共创沙盘</p>
             </div>
             <div class="reset-link" onclick="resetSetup()">重新校准屏幕位置</div>
@@ -130,7 +126,6 @@
         let currentMode = 'single';
         let isRunning = false;
         let peer = null, conn = null;
-        let connectInterval = null;
 
         function startSystem() {
             document.getElementById('init-layer').style.display = 'none';
@@ -186,56 +181,61 @@
             document.getElementById('manual-toggle').style.display = isRunning ? 'none' : 'flex';
         }
 
-        // --- 协作逻辑：双向主动连接 ---
+        // --- 核心：工业级 P2P 联动 ---
         function launchDouble(gameId) {
             document.getElementById('sync-wait').style.display = 'flex';
-            document.getElementById('wait-msg').innerText = "正在寻找邻居屏幕...";
-            initPeerConnection(gameId);
+            document.getElementById('wait-msg').innerText = "寻找邻居中...";
+            startNetwork(gameId);
         }
 
-        function initPeerConnection(gameId) {
+        function startNetwork(gameId) {
             if (peer) peer.destroy();
             
-            // 每一个会话生成一个微小的随机后缀，防止 ID 冲突死锁
-            const sessionSuffix = Math.floor(Math.random() * 99);
-            const myPeerId = `tm-v11-${mySide}`;
-            const targetPeerId = `tm-v11-${mySide === 'left' ? 'right' : 'left'}`;
+            // 每一个终端使用极其特殊的后缀，避免全球冲突
+            const UNIQUE_KEY = "COMMUNITY-TIME-MACHINE-V12";
+            const myPeerId = `${UNIQUE_KEY}-${mySide}`;
+            const targetPeerId = `${UNIQUE_KEY}-${mySide === 'top' ? 'bottom' : 'top'}`;
+            document.getElementById('debug-id').innerText = `MY_ID: ${mySide.toUpperCase()}`;
 
-            peer = new Peer(myPeerId);
+            // 配置 Google 公共 STUN 服务器，大幅提高联网成功率
+            peer = new Peer(myPeerId, {
+                config: {
+                    'iceServers': [
+                        { url: 'stun:stun.l.google.com:19302' },
+                        { url: 'stun:stun1.l.google.com:19302' }
+                    ]
+                }
+            });
 
-            peer.on('open', (id) => {
-                console.log("Local ID:", id);
-                // 开启高频双向尝试
-                if (connectInterval) clearInterval(connectInterval);
-                connectInterval = setInterval(() => {
-                    if (conn || !peer || peer.destroyed) return;
-                    document.getElementById('wait-msg').innerText = `正在搜寻邻居: ${targetPeerId}`;
+            peer.on('open', () => {
+                // 持续尝试连接邻居
+                const connector = setInterval(() => {
+                    if (conn || !peer || peer.destroyed) { clearInterval(connector); return; }
+                    
                     const attempt = peer.connect(targetPeerId, { reliable: true });
-                    setupConnHandlers(attempt, gameId);
+                    setupConn(attempt, gameId);
                 }, 2000);
             });
 
             peer.on('connection', (c) => {
-                if (conn) return; // 已经连上了
+                if (conn) return;
                 conn = c;
-                setupConnHandlers(c, gameId);
+                setupConn(c, gameId);
             });
 
             peer.on('error', (err) => {
-                if (err.type === 'unavailable-id') {
-                    // 如果 ID 被占用，尝试稍微等待重连
-                    setTimeout(() => initPeerConnection(gameId), 3000);
+                if(err.type === 'unavailable-id') {
+                    // ID 冲突，通常是刷新过快导致旧连接没断，5秒后重试
+                    setTimeout(() => startNetwork(gameId), 5000);
                 }
             });
         }
 
-        function setupConnHandlers(connection, gameId) {
+        function setupConn(connection, gameId) {
             connection.on('open', () => {
-                if (connectInterval) clearInterval(connectInterval);
                 conn = connection;
-                document.getElementById('wait-msg').innerText = "已成功握手，开启空间...";
+                document.getElementById('wait-msg').innerText = "联机成功！";
                 if (gameId) conn.send({ type: 'LAUNCH', gameId: gameId });
-                updateUI();
             });
 
             connection.on('data', (data) => {
@@ -247,9 +247,9 @@
                 }
             });
 
-            connection.on('close', () => {
-                conn = null;
-                if (!isRunning) launchDouble(); // 断开重连
+            connection.on('close', () => { 
+                conn = null; 
+                if(isRunning) exitGame(); 
             });
         }
 
@@ -260,7 +260,6 @@
         });
 
         function cancelLaunch() {
-            if (connectInterval) clearInterval(connectInterval);
             document.getElementById('sync-wait').style.display = 'none';
             if (peer) { peer.destroy(); peer = null; }
             conn = null;
@@ -282,6 +281,7 @@
             frame.src = urls[gameId];
             document.getElementById('game-runtime').style.display = 'block';
             wrap.className = (currentMode === 'single' ? 'mode-single-active' : 'mode-double-active') + ` side-${mySide}`;
+            updateUI();
         }
 
         function exitGame() {
