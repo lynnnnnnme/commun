@@ -3,271 +3,329 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>社区时光机 - 智慧协同终端</title>
+    <title>记忆对战 - 凑十挑战</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@500;700;900&display=swap');
-        :root { 
-            --primary-green: #8DB5AA; 
-            --bg-single: #FDFBF7; /* 单人偏亮 */
-            --bg-double: #EAE4DD; /* 双人调暗，增加质感 */
-            --dark-stone: #525252;
-            --pink: #FFADAD; --blue: #A0C4FF; --green: #CAFFBF; --yellow: #FDFFB6;
-        }
-        
-        * { margin: 0; padding: 0; box-sizing: border-box; outline: none; }
-        body { background: #E8F1EE; height: 100vh; width: 100vw; display: flex; align-items: center; justify-content: center; overflow: hidden; font-family: 'Noto Sans SC', sans-serif; color: var(--dark-stone); }
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@700;900&family=Klee+One:wght@600&display=swap');
 
-        /* 动态比例核心容器 */
-        #main-stage {
-            position: relative; width: 90vw; height: 94vh; max-width: 500px;
-            background: var(--bg-single); border-radius: 45px; border: 8px solid white;
-            box-shadow: 0 40px 100px rgba(141, 181, 170, 0.1); overflow: hidden;
-            display: flex; flex-direction: column; transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        :root {
+            --primary-green: #8DB5AA;
+            --light-green: #D2E0DB;
+            --dark-text: #3D4443;
+            --soft-beige: #F3EEEA;
+            --card-white: #FFFFFF;
         }
 
-        .ratio-single { aspect-ratio: 3 / 4; background: var(--bg-single) !important; }
-        .ratio-double { aspect-ratio: 3 / 8; background: var(--bg-double) !important; }
-
-        .view-section { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 30px; text-align: center; }
-        .active-view { display: flex !important; }
-
-        /* 顶部手动覆盖按钮 */
-        #manual-toggle {
-            position: absolute; top: 25px; right: 25px; z-index: 2000;
-            width: 38px; height: 38px; background: rgba(255,255,255,0.7);
-            border-radius: 50%; display: flex; align-items: center; justify-content: center;
-            cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.05); color: var(--primary-green);
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; }
+        body { 
+            background: #DDE7E4; height: 100vh; width: 100vw; 
+            display: flex; align-items: center; justify-content: center; 
+            overflow: hidden; font-family: 'Noto Sans SC', sans-serif; 
+            color: var(--dark-text);
         }
 
-        .color-card {
-            width: 100%; max-width: 250px; padding: 22px; border-radius: 28px;
-            margin-bottom: 15px; background: white; box-shadow: 0 8px 25px rgba(0,0,0,0.03);
-            cursor: pointer; transition: 0.3s; display: flex; flex-direction: column; align-items: center;
+        /* 3:4 容器，增加外部呼吸感 */
+        #tablet-stage {
+            position: relative;
+            height: 82vh; aspect-ratio: 3 / 4;
+            background: var(--card-white); border-radius: 42px;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.08);
+            padding: 24px; display: flex; flex-direction: column; gap: 14px;
         }
-        .color-card:active { transform: scale(0.96); }
-        .card-icon { width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; color: white; }
 
-        /* 启动等待层 */
-        .sync-wait-layer {
-            position: absolute; inset: 0; background: rgba(255,255,255,0.95);
-            z-index: 1500; display: none; flex-direction: column; align-items: center; justify-content: center;
+        /* 顶部信息 */
+        .info-bar {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0 4px;
         }
-        .spinner { width: 40px; height: 40px; border: 4px solid #F0F0F0; border-top: 4px solid var(--primary-green); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
-        @keyframes spin { 100% { transform: rotate(360deg); } }
 
-        /* 运行容器 */
-        #game-frame-wrap { width: 100%; height: 100%; overflow: hidden; display: none; position: relative; }
-        iframe { width: 200%; height: 100%; position: absolute; top: 0; border: none; }
-        .side-left iframe { left: 0; }
-        .side-right iframe { left: -100%; }
+        /* 棋盘 */
+        #game-board { 
+            flex: 1; background: var(--soft-beige); border-radius: 28px; 
+            position: relative; overflow: hidden; 
+        }
 
-        /* 引导与激活 */
-        #init-layer, #setup-layer { position: fixed; inset: 0; background: #E8F1EE; z-index: 9000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        #setup-layer { z-index: 8000; display: none; }
-        .btn-ready { background: var(--primary-green); color: white; padding: 14px 45px; border-radius: 50px; font-weight: 900; font-size: 0.9rem; border: none; cursor: pointer; }
+        /* 弹窗层 */
+        .local-overlay {
+            position: absolute; inset: 0;
+            background: rgba(255, 255, 255, 0.96);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            z-index: 200; border-radius: 28px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 30px; text-align: center;
+        }
+
+        /* 底部核心按钮 */
+        .action-btn {
+            width: 100%; height: 68px; 
+            background: var(--primary-green);
+            border-radius: 22px;
+            color: #FFFFFF; font-weight: 900; font-size: 1.3rem;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(141, 181, 170, 0.3);
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .action-btn:active { transform: translateY(3px) scale(0.98); }
+        .action-btn.waiting { background: #CBD5E1; color: white; cursor: not-allowed; }
+
+        /* 倒计时文字 */
+        #countdown-text {
+            font-size: 5rem; font-weight: 900; color: var(--primary-green);
+            display: none; transform: scale(1.5);
+        }
+
+        /* 键盘 */
+        .num-pad {
+            position: absolute; inset: 0; 
+            background: rgba(255, 255, 255, 0.98);
+            display: none; flex-direction: column; 
+            padding: 20px; border-radius: 28px; z-index: 150;
+        }
+        .input-display-box {
+            height: 44px; width: 100%; background: var(--soft-beige);
+            border-radius: 12px; margin-bottom: 12px;
+            display: flex; align-items: center; justify-content: center;
+            color: var(--primary-green); font-weight: 900; font-size: 1rem;
+        }
+        .num-pad-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; flex: 1; }
+        .num-btn {
+            background: var(--soft-beige); border-radius: 14px;
+            font-size: 1.1rem; font-weight: 900;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .num-btn:active { background: #E2DBD5; }
+        .num-btn.confirm { background: #F57D7D; color: #FFF; grid-column: span 2; }
+
+        /* 卡牌 */
+        .card {
+            position: absolute; width: 48px; height: 68px;
+            background: white; border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            display: flex; justify-content: center; align-items: center;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            border: 1px solid rgba(255,255,255,0.6);
+        }
+        .card-num { font-family: 'Klee One', serif; font-size: 1.4rem; font-weight: 900; color: var(--dark-text); }
+
+        .btn-restart { 
+            background: var(--primary-green); color: #FFF; padding: 12px 30px; 
+            border-radius: 50px; font-weight: 900; margin-top: 20px;
+        }
     </style>
 </head>
 <body>
 
-    <!-- 1. 启动激活 -->
-    <div id="init-layer">
-        <div class="mb-8 text-[#8DB5AA] animate-pulse"><i data-lucide="power" size="52"></i></div>
-        <h1 class="text-xl font-black mb-10 tracking-[0.2em]">智慧终端已就绪</h1>
-        <button onclick="startSystem()" class="btn-ready">开启</button>
-    </div>
-
-    <!-- 2. 位置配置 -->
-    <div id="setup-layer">
-        <h2 class="text-lg font-black mb-10 text-stone-500 text-center">请校准此屏幕的位置</h2>
-        <div class="flex flex-col gap-4 w-64">
-            <button onclick="saveSide('left')" class="btn-ready">左侧屏幕 (Host)</button>
-            <button onclick="saveSide('right')" class="btn-ready" style="background:#7B8A8E">右侧屏幕 (Client)</button>
-        </div>
-    </div>
-
-    <!-- 3. 核心主舞台 -->
-    <div id="main-stage" class="ratio-single">
-        
-        <!-- 手动切换按钮 -->
-        <div id="manual-toggle" onclick="toggleModeManual()">
-            <i data-lucide="refresh-cw" size="18"></i>
+    <div id="tablet-stage">
+        <!-- 状态栏 -->
+        <div class="info-bar">
+            <div class="flex items-center gap-2">
+                <div class="w-1 h-5 bg-[#8DB5AA] rounded-full"></div>
+                <span id="timer-val" class="text-lg font-black text-[#8DB5AA]">120</span>
+            </div>
+            <div class="flex flex-col items-end">
+                <span class="text-[0.6rem] font-bold text-stone-400 uppercase">Score</span>
+                <span id="score-val" class="text-lg font-black text-[#3D4443]">0</span>
+            </div>
         </div>
 
-        <!-- 联机同步层 -->
-        <div id="sync-wait" class="sync-wait-layer">
-            <div class="spinner"></div>
-            <p class="text-sm font-black text-stone-500">正在与邻居同步画面...</p>
-            <button onclick="cancelLaunch()" class="mt-8 text-xs font-bold text-stone-300 underline">取消</button>
+        <!-- 棋盘 -->
+        <div id="game-board">
+            <div id="deck" class="w-full h-full relative"></div>
+            
+            <!-- 引导面板 -->
+            <div id="intro-overlay" class="local-overlay">
+                <div id="intro-content">
+                    <h1 class="text-xl font-black mb-3">凑十挑战</h1>
+                    <p class="text-stone-500 text-xs font-bold leading-relaxed mb-6">
+                        请双方同时按下按钮开始游戏<br>
+                        <span class="text-[#8DB5AA]">组合数字之和等于 10 即可得分</span>
+                    </p>
+                    <div class="bg-stone-50 p-4 rounded-2xl border border-stone-100">
+                        <p class="text-[0.7rem] text-stone-400 font-medium">
+                            记住数字位置，点击下方按钮进行抢答
+                        </p>
+                    </div>
+                </div>
+                <!-- 3秒倒数 -->
+                <div id="countdown-text">3</div>
+            </div>
+
+            <!-- 结算 -->
+            <div id="end-overlay" class="local-overlay" style="display: none;">
+                <h2 class="text-xl font-black mb-2">挑战结束</h2>
+                <div id="final-score" class="text-5xl font-black text-[#8DB5AA] mb-4">0</div>
+                <button onclick="location.reload()" class="btn-restart">再试一次</button>
+            </div>
+
+            <!-- 输入面板 -->
+            <div class="num-pad" id="input-pad">
+                <div id="hint-box" class="input-display-box">等待输入组合</div>
+                <div class="num-pad-grid">
+                    <button class="num-btn" onclick="inputNum(1)">1</button><button class="num-btn" onclick="inputNum(2)">2</button><button class="num-btn" onclick="inputNum(3)">3</button>
+                    <button class="num-btn" onclick="inputNum(4)">4</button><button class="num-btn" onclick="inputNum(5)">5</button><button class="num-btn" onclick="inputNum(6)">6</button>
+                    <button class="num-btn" onclick="inputNum(7)">7</button><button class="num-btn" onclick="inputNum(8)">8</button><button class="num-btn" onclick="inputNum(9)">9</button>
+                    <button class="num-btn bg-stone-100" onclick="clearInput()">清空</button>
+                    <button class="num-btn confirm" onclick="submitInput()">确认</button>
+                </div>
+            </div>
         </div>
 
-        <!-- 单人菜单 (默认初始场景) -->
-        <div id="view-single" class="view-section active-view">
-            <h2 class="font-black mb-8 text-stone-300 uppercase tracking-widest text-[0.6rem]">Single Discovery</h2>
-            <div class="color-card" onclick="launch('single-htp')" style="border-bottom: 5px solid var(--pink)">
-                <div class="card-icon" style="background:var(--pink)"><i data-lucide="palette" size="20"></i></div>
-                <p class="font-black text-sm text-center">房树人心理绘测</p>
-            </div>
-            <div class="color-card" onclick="launch('single-book')" style="border-bottom: 5px solid var(--blue)">
-                <div class="card-icon" style="background:var(--blue)"><i data-lucide="book-open" size="20"></i></div>
-                <p class="font-black text-sm text-center">社区答案之书</p>
-            </div>
-            <p class="mt-8 text-[0.6rem] font-bold text-stone-300">竖屏探索 · 寻找内心答案</p>
-        </div>
-
-        <!-- 双人菜单 (背景色已调暗) -->
-        <div id="view-double" class="view-section">
-            <h2 class="font-black mb-8 text-stone-400 uppercase tracking-widest text-[0.6rem]">Cooperation Space</h2>
-            <div class="color-card" onclick="launchDouble('double-cards')" style="border-bottom: 5px solid var(--green)">
-                <div class="card-icon" style="background:var(--green)"><i data-lucide="brain" size="20"></i></div>
-                <p class="font-black text-sm text-center">凑十记忆挑战</p>
-            </div>
-            <div class="color-card" onclick="launchDouble('double-sand')" style="border-bottom: 5px solid var(--yellow)">
-                <div class="card-icon" style="background:var(--yellow); color:#888"><i data-lucide="layout-grid" size="20"></i></div>
-                <p class="font-black text-sm text-center">社区共创沙盘</p>
-            </div>
-            <p class="mt-8 text-[0.6rem] font-bold text-stone-400">横屏联机 · 开启协作之旅</p>
-        </div>
-
-        <!-- 游戏运行容器 -->
-        <div id="game-runtime" class="view-section !p-0">
-            <div id="game-frame-wrap">
-                <iframe id="game-frame" src=""></iframe>
-            </div>
-            <button class="absolute top-4 left-4 bg-white/90 p-2 rounded-full shadow-md" onclick="exitGame()">
-                <i data-lucide="chevron-left" size="20" color="#8DB5AA"></i>
-            </button>
+        <!-- 底部主控按钮 -->
+        <div class="pb-2">
+            <button class="action-btn" id="main-btn" onclick="handleMainAction()">准备</button>
         </div>
     </div>
 
     <script>
-        lucide.createIcons();
+        const COLORS = ["#F5D1D1", "#B8E4D5", "#D8B4FE", "#F9E2AF", "#BAE2FF"];
+        let state = {
+            gameStarted: false,
+            countingDown: false,
+            active: false,
+            score: 0,
+            timeLeft: 120,
+            isInputting: false,
+            inputStack: [],
+            boardCards: []
+        };
 
-        let mySide = localStorage.getItem('tm_side');
-        let currentMode = 'single'; // 强制默认单人
-        let isRunning = false;
-        let peer = null, conn = null;
+        const mainBtn = document.getElementById('main-btn');
+        const introContent = document.getElementById('intro-content');
+        const countdownTxt = document.getElementById('countdown-text');
 
-        function startSystem() {
-            document.getElementById('init-layer').style.display = 'none';
-            if (!mySide) document.getElementById('setup-layer').style.display = 'flex';
-            else activateTerminal();
-        }
-
-        function saveSide(side) {
-            localStorage.setItem('tm_side', side);
-            mySide = side;
-            document.getElementById('setup-layer').style.display = 'none';
-            activateTerminal();
-        }
-
-        async function activateTerminal() {
-            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try { await DeviceOrientationEvent.requestPermission(); } catch(e){}
+        // 主按钮逻辑分发
+        function handleMainAction() {
+            if (!state.gameStarted && !state.countingDown) {
+                startReadyCountdown();
+            } else if (state.active && !state.isInputting) {
+                startAttack();
             }
-            window.addEventListener('deviceorientation', (e) => {
-                if (isRunning) return;
-                const beta = Math.abs(e.beta), gamma = Math.abs(e.gamma);
-                // 只有完全平放才切双人
-                if (beta < 15 && gamma < 15) setMode('double');
-                else if (beta > 35) setMode('single');
+        }
+
+        // 倒计时逻辑
+        function startReadyCountdown() {
+            state.countingDown = true;
+            mainBtn.innerText = "准备中...";
+            mainBtn.classList.add('waiting');
+            introContent.style.display = 'none';
+            countdownTxt.style.display = 'block';
+
+            let count = 3;
+            countdownTxt.innerText = count;
+
+            const cdInterval = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    countdownTxt.innerText = count;
+                } else {
+                    clearInterval(cdInterval);
+                    startGame();
+                }
+            }, 1000);
+        }
+
+        function startGame() {
+            document.getElementById('intro-overlay').style.display = 'none';
+            state.gameStarted = true;
+            state.active = true;
+            state.countingDown = false;
+            
+            mainBtn.innerText = "我发现了！";
+            mainBtn.classList.remove('waiting');
+
+            const timer = setInterval(() => {
+                if(!state.active) return;
+                state.timeLeft--;
+                document.getElementById('timer-val').innerText = state.timeLeft;
+                if(state.timeLeft <= 0) {
+                    clearInterval(timer);
+                    endGame();
+                }
+            }, 1000);
+
+            setInterval(spawn, 1800);
+            spawn(); spawn();
+        }
+
+        function spawn() {
+            if(!state.active || state.isInputting) return;
+            if(state.boardCards.length >= 10) {
+                const oldest = state.boardCards.shift();
+                oldest.el.style.transform = "scale(0)";
+                setTimeout(() => oldest.el.remove(), 400);
+            }
+            const val = Math.floor(Math.random() * 9) + 1;
+            const el = document.createElement('div');
+            el.className = 'card';
+            el.innerHTML = `<div class="card-num">${val}</div>`;
+            el.style.backgroundColor = COLORS[Math.floor(Math.random()*COLORS.length)];
+            const board = document.getElementById('game-board');
+            const x = 15 + Math.random() * (board.clientWidth - 70);
+            const y = 15 + Math.random() * (board.clientHeight - 90);
+            el.style.left = x + 'px'; el.style.top = y + 'px';
+            el.style.transform = `rotate(${(Math.random()-0.5)*20}deg) scale(0)`;
+            const cardObj = { id: Math.random(), val, el };
+            document.getElementById('deck').appendChild(el);
+            state.boardCards.push(cardObj);
+            setTimeout(() => el.style.transform = el.style.transform.replace('scale(0)', 'scale(1)'), 50);
+        }
+
+        function startAttack() {
+            state.isInputting = true;
+            state.inputStack = [];
+            document.getElementById('input-pad').style.display = 'flex';
+            updateHint();
+        }
+
+        function inputNum(n) {
+            if(state.inputStack.length < 4) {
+                state.inputStack.push(n);
+                updateHint();
+            }
+        }
+
+        function clearInput() { state.inputStack = []; updateHint(); }
+
+        function updateHint() {
+            const h = document.getElementById('hint-box');
+            h.innerText = state.inputStack.length > 0 ? state.inputStack.join(' + ') : "等待输入";
+        }
+
+        function submitInput() {
+            const sum = state.inputStack.reduce((a, b) => a + b, 0);
+            let tempBoard = state.boardCards.map(c => c.val);
+            let valid = true;
+            state.inputStack.forEach(n => {
+                const i = tempBoard.indexOf(n);
+                if(i > -1) tempBoard.splice(i, 1);
+                else valid = false;
             });
-            updateUI();
-        }
 
-        function setMode(mode) {
-            if (currentMode === mode) return;
-            currentMode = mode;
-            updateUI();
-        }
-
-        function toggleModeManual() {
-            setMode(currentMode === 'single' ? 'double' : 'single');
-        }
-
-        function updateUI() {
-            document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active-view'));
-            const stage = document.getElementById('main-stage');
-            if (currentMode === 'single') {
-                stage.className = 'ratio-single';
-                document.getElementById('view-single').classList.add('active-view');
+            if(sum === 10 && valid && state.inputStack.length > 0) {
+                state.score += state.inputStack.length;
+                state.inputStack.forEach(num => {
+                    const idx = state.boardCards.findIndex(c => c.val === num);
+                    if(idx > -1) {
+                        const card = state.boardCards[idx];
+                        card.el.style.transform = "scale(0) translateY(-30px)";
+                        state.boardCards.splice(idx, 1);
+                        setTimeout(() => card.el.remove(), 400);
+                    }
+                });
             } else {
-                stage.className = 'ratio-double';
-                document.getElementById('view-double').classList.add('active-view');
+                state.score = Math.max(0, state.score - 1);
             }
-            document.getElementById('manual-toggle').style.display = isRunning ? 'none' : 'flex';
+            document.getElementById('score-val').innerText = state.score;
+            document.getElementById('input-pad').style.display = 'none';
+            state.isInputting = false;
         }
 
-        function launchDouble(gameId) {
-            document.getElementById('sync-wait').style.display = 'flex';
-            startNetwork(gameId);
-        }
-
-        function startNetwork(gameId) {
-            if (peer) peer.destroy();
-            peer = new Peer(`tm-link-v6-${mySide}`);
-            peer.on('open', () => {
-                const target = mySide === 'left' ? `tm-link-v6-right` : `tm-link-v6-left`;
-                const connector = setInterval(() => {
-                    if (conn || isRunning || !peer) { clearInterval(connector); return; }
-                    conn = peer.connect(target);
-                    if(conn) setupConn(gameId);
-                }, 1500);
-            });
-            peer.on('connection', (c) => {
-                if (conn) return;
-                conn = c;
-                setupConn(gameId);
-            });
-        }
-
-        function setupConn(gameId) {
-            conn.on('open', () => {
-                if (gameId) conn.send({ type: 'LAUNCH', gameId: gameId });
-            });
-            conn.on('data', (data) => {
-                if (data.type === 'LAUNCH') doLaunch(data.gameId);
-                if (data.type === 'EXIT') doExit();
-            });
-        }
-
-        function cancelLaunch() {
-            document.getElementById('sync-wait').style.display = 'none';
-            if (peer) { peer.destroy(); peer = null; }
-            conn = null;
-        }
-
-        function launch(gameId) { doLaunch(gameId); }
-
-        function doLaunch(gameId) {
-            isRunning = true;
-            document.getElementById('sync-wait').style.display = 'none';
-            const frame = document.getElementById('game-frame');
-            const urls = {
-                'single-htp': 'htp_latest.html', 'single-book': 'book_of_answers.html',
-                'double-cards': 'make_ten.html', 'double-sand': 'sandtray.html'
-            };
-            frame.src = urls[gameId];
-            document.getElementById('game-frame-wrap').style.display = 'block';
-            document.getElementById('game-frame-wrap').className = `side-${mySide}`;
-            updateUI();
-            document.getElementById('game-runtime').classList.add('active-view');
-        }
-
-        function exitGame() {
-            if (conn) conn.send({ type: 'EXIT' });
-            doExit();
-        }
-
-        function doExit() {
-            isRunning = false;
-            document.getElementById('game-frame-wrap').style.display = 'none';
-            document.getElementById('game-frame').src = "";
-            if (peer) { peer.destroy(); peer = null; }
-            conn = null;
-            updateUI();
+        function endGame() {
+            state.active = false;
+            document.getElementById('final-score').innerText = state.score;
+            document.getElementById('end-overlay').style.display = 'flex';
+            mainBtn.style.display = 'none';
         }
     </script>
 </body>
