@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>内心景观 - 成人心理绘测</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@500;700;900&family=Klee+One:wght@600&display=swap');
+        :root {
+            --primary-green: #8DB5AA;
+            --soft-beige: #F3EEEA;
+            --dark-grey: #4A4A4A;
+            --mc-slot-bg: rgba(255, 255, 255, 0.95);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; }
+        body { background: #E8F1EE; height: 100vh; width: 100vw; display: flex; align-items: center; justify-content: center; overflow: hidden; font-family: 'Noto Sans SC', sans-serif; color: var(--dark-grey); touch-action: none; }
+
+        /* 3:4 比例容器 (物理尺寸 30x40cm) */
+        #stage {
+            position: relative; height: 98vh; aspect-ratio: 3 / 4;
+            background: #FDFBF7; border-radius: 40px; border: 10px solid white;
+            box-shadow: 0 30px 80px rgba(0,0,0,0.05); overflow: hidden;
+        }
+
+        .scene { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 35px; }
+        .active-scene { display: flex; }
+
+        /* 绘画区域 */
+        .canvas-wrap { flex-grow: 1; width: 100%; margin: 15px 0; background: #FFFFFF; border-radius: 25px; border: 1px solid #F0F0F0; overflow: hidden; }
+        canvas { width: 100%; height: 100%; touch-action: none; }
+
+        /* 气泡特质流 */
+        .bubble-stream { 
+            display: flex; gap: 8px; width: 100%; padding: 10px 0;
+            overflow-x: auto; scrollbar-width: none; flex-shrink: 0;
+            justify-content: center;
+        }
+        .trait-tag { 
+            flex-shrink: 0; background: rgba(141, 181, 170, 0.08); color: var(--primary-green);
+            padding: 5px 16px; border-radius: 50px; font-weight: 800;
+            font-size: 0.65rem; border: 1px solid rgba(141, 181, 170, 0.15);
+            letter-spacing: 0.05em;
+        }
+
+        /* Minecraft 风格解析格 */
+        .res-list { display: flex; flex-direction: column; gap: 10px; width: 100%; margin-top: 10px; }
+        .inv-box {
+            width: 100%; background: var(--mc-slot-bg); border: 1.8px solid #D1D5DB; border-radius: 12px;
+            padding: 15px 20px; box-shadow: inset 1px 1px 4px rgba(0,0,0,0.02);
+            font-size: 0.78rem; line-height: 1.7; color: #555; font-weight: 500; text-align: left;
+        }
+
+        /* 工具栏 */
+        .tool-bar { width: 100%; max-width: 500px; padding: 5px 0; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
+        input[type=range] { -webkit-appearance: none; width: 100%; height: 5px; border-radius: 10px; background: #EEE; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: white; border: 2.5px solid var(--primary-green); cursor: pointer; }
+        .color-slider { background: linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000) !important; }
+
+        .btn-green { background: var(--primary-green); color: white; padding: 12px 45px; border-radius: 50px; font-size: 0.9rem; font-weight: 900; border: none; cursor: pointer; transition: all 0.2s; box-shadow: 0 5px 15px rgba(141, 181, 170, 0.2); }
+        .btn-green:active { transform: translateY(2px); }
+        .nav-btn { width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
+    </style>
+</head>
+<body>
+
+<div id="stage">
+    <!-- 1. 引导场景 -->
+    <div id="scene-intro" class="scene active-scene text-center">
+        <div class="mb-8 text-[#8DB5AA] opacity-80"><i data-lucide="wind" size="40"></i></div>
+        <h1 class="text-2xl font-black mb-4 tracking-wider">内心景观绘测</h1>
+        <p class="text-stone-400 font-bold leading-loose mb-12 px-6 text-sm">
+            暂时放下纷扰，<span class="whitespace-nowrap">与真实的自己相遇。</span><br>
+            请凭直觉在画布上创作：<br>
+            <span class="text-stone-600">房子、树木和人物。</span><br>
+            AI 伙伴将通过意象，感知你当下的生命能量。
+        </p>
+        <button onclick="goToScene('draw')" class="btn-green">开始深度对话</button>
+    </div>
+
+    <!-- 2. 绘画场景 -->
+    <div id="scene-draw" class="scene">
+        <div class="flex justify-between items-center w-full h-[45px] flex-shrink-0 px-2">
+            <div onclick="undo()" class="nav-btn bg-stone-100"><i data-lucide="rotate-ccw" size="18" color="#525252"></i></div>
+            <span class="font-black text-stone-300 text-[0.65rem] tracking-[0.2em] uppercase">Inner Reflection</span>
+            <div onclick="submitToAI()" class="nav-btn bg-[#8DB5AA] shadow-md"><i data-lucide="check" size="26" color="white"></i></div>
+        </div>
+        <div class="canvas-wrap"><canvas id="htp-canvas"></canvas></div>
+        <div class="tool-bar">
+            <input type="range" id="pen-color" class="color-slider" min="0" max="360" value="200" oninput="updateBrush()">
+            <input type="range" id="pen-size" min="1" max="12" value="3" oninput="updateBrush()">
+        </div>
+    </div>
+
+    <!-- 3. 等待场景 -->
+    <div id="scene-wait" class="scene">
+        <div class="w-10 h-10 border-3 border-stone-100 border-t-[#8DB5AA] rounded-full animate-spin mb-6"></div>
+        <p class="text-stone-400 font-black text-sm tracking-widest">正在感悟画作中的心理意象...</p>
+    </div>
+
+    <!-- 4. 结果场景 -->
+    <div id="scene-result" class="scene !justify-start !overflow-y-auto">
+        <div class="w-full flex flex-col items-center">
+            <h2 class="text-[0.6rem] font-black mt-4 text-stone-300 tracking-[0.3em] uppercase">Soul Landscape Report</h2>
+            <h1 class="text-lg font-black mb-4 text-stone-600">你的内心景观报告</h1>
+            
+            <img id="final-img" class="w-[88%] rounded-2xl border-[6px] border-white shadow-md mb-2" src="">
+            
+            <!-- 特质气泡流 -->
+            <div id="bubble-stream" class="bubble-stream"></div>
+
+            <!-- 综合解析 -->
+            <div class="res-list" id="ai-observations">
+                <div class="inv-box">正在梳理你的心灵地图...</div>
+            </div>
+
+            <button onclick="location.reload()" class="btn-green w-full mt-10 mb-10">重塑内心景观</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    lucide.createIcons();
+
+    // ---------------------------------------------------------
+    // AI 接口配置区域
+    // ---------------------------------------------------------
+    const AI_CONFIG = {
+        endpoint: "https://api.openai.com/v1/chat/completions",
+        apiKey: "YOUR_API_KEY", 
+        model: "gpt-4o"
+    };
+
+    let history = [];
+    let brush = { h: 200, s: 3, active: false };
+    const canvas = document.getElementById('htp-canvas');
+    const ctx = canvas.getContext('2d');
+
+    function goToScene(id) {
+        document.querySelectorAll('.scene').forEach(s => s.classList.remove('active-scene'));
+        document.getElementById(`scene-${id}`).classList.add('active-scene');
+        if(id === 'draw') initCanvas();
+    }
+
+    function initCanvas() {
+        setTimeout(() => {
+            const wrap = canvas.parentElement;
+            canvas.width = wrap.clientWidth;
+            canvas.height = wrap.clientHeight;
+            
+            // 重要：填充纯白背景，防止 JPEG 导出变黑
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+            updateBrush();
+        }, 100);
+    }
+
+    const getXY = (e) => {
+        const r = canvas.getBoundingClientRect();
+        const cx = e.clientX || (e.touches && e.touches[0].clientX);
+        const cy = e.clientY || (e.touches && e.touches[0].clientY);
+        return { x: cx - r.left, y: cy - r.top };
+    };
+
+    canvas.addEventListener('pointerdown', (e) => {
+        saveHistory(); brush.active = true;
+        const pos = getXY(e); ctx.beginPath(); ctx.moveTo(pos.x, pos.y);
+        canvas.setPointerCapture(e.pointerId);
+    });
+
+    canvas.addEventListener('pointermove', (e) => {
+        if(!brush.active) return;
+        const pos = getXY(e); ctx.lineTo(pos.x, pos.y); ctx.stroke();
+    });
+
+    canvas.addEventListener('pointerup', () => brush.active = false);
+
+    function updateBrush() {
+        brush.h = document.getElementById('pen-color').value;
+        brush.s = document.getElementById('pen-size').value;
+        ctx.strokeStyle = `hsl(${brush.h}, 60%, 45%)`; ctx.lineWidth = brush.s;
+    }
+
+    function saveHistory() {
+        if(history.length > 30) history.shift();
+        history.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+    }
+
+    function undo() { if(history.length > 0) ctx.putImageData(history.pop(), 0, 0); }
+
+    // ---------------------------------------------------------
+    // AI 分析逻辑
+    // ---------------------------------------------------------
+    async function submitToAI() {
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        document.getElementById('final-img').src = dataUrl;
+        goToScene('wait');
+
+        const prompt = `你是一位智慧、儒雅的心理艺术观察家。请观察这张成人创作的"房、树、人"综合绘测。
+        要求：
+        1. 严禁提到任何绘画技术（如线条、粗细、构图、比例）。
+        2. 严禁透露分析逻辑（如房子代表什么、树木代表什么）。
+        3. 你的任务：从画面传递的整体气息中，提取出成人世界的正向力量。
+        4. 提供5个富有文学感、成熟稳重的性格高光词汇。
+        5. 提供3段关于内心状态的感性解读，语气要智慧、鼓励且治愈。
+        6. 只返回JSON格式：{"keywords": ["词1", "词2"...], "observations": ["解读1", "解读2"...]}`;
+
+        try {
+            const response = await fetch(AI_CONFIG.endpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${AI_CONFIG.apiKey}` },
+                body: JSON.stringify({
+                    model: AI_CONFIG.model,
+                    messages: [{ role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: dataUrl } }] }],
+                    response_format: { type: "json_object" }
+                })
+            });
+
+            const data = await response.json();
+            const result = JSON.parse(data.choices[0].message.content);
+
+            const stream = document.getElementById('bubble-stream');
+            stream.innerHTML = "";
+            result.keywords.forEach(word => {
+                const span = document.createElement('span');
+                span.className = "trait-tag";
+                span.innerText = word;
+                stream.appendChild(span);
+            });
+
+            const list = document.getElementById('ai-observations');
+            list.innerHTML = "";
+            result.observations.forEach(text => {
+                const div = document.createElement('div');
+                div.className = "inv-box";
+                div.innerText = text;
+                list.appendChild(div);
+            });
+
+        } catch (error) {
+            console.error("AI分析出错:", error);
+            document.getElementById('bubble-stream').innerHTML = `<span class="trait-tag">内心的定力</span><span class="trait-tag">温和的韧性</span><span class="trait-tag">精神的港湾</span>`;
+            document.getElementById('ai-observations').innerHTML = `<div class="inv-box">在复杂的成人世界里，你的内心依然保留着一片宁静的自留地。</div><div class="inv-box">你拥有极佳的自我调节能力，总能在生活中发现那些微小而坚定的美。</div>`;
+        }
+        goToScene('result');
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>智慧终端</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@500;700;900&display=swap');
+        
+        :root { 
+            --primary-green: #8DB5AA; 
+            --pink: #FFADAD; --blue: #A0C4FF; --green: #CAFFBF; --yellow: #FDFFB6;
+        }
+        
+        /* 彻底清理页边距，确保 100% 填充 */
+        * { margin: 0; padding: 0; box-sizing: border-box; outline: none; }
+        html, body { width: 100%; height: 100%; background: #E8F1EE; overflow: hidden; font-family: 'Noto Sans SC', sans-serif; }
+
+        /* 主容器：取消圆角、取消白边、取消阴影 */
+        #main-stage {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: #FDFBF7;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 菜单视图层 */
+        .view-section { 
+            position: absolute; 
+            inset: 0; 
+            display: none; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            padding: 20px; 
+            text-align: center;
+            background: #FDFBF7;
+            z-index: 100;
+        }
+        .active-view { display: flex !important; }
+
+        /* 双人模式背景调暗 */
+        .mode-double-ui { background: #EAE4DD !important; }
+
+        /* 右上角手动切换：极简半透明，不挡画面 */
+        #manual-toggle {
+            position: absolute; 
+            top: 20px; 
+            right: 20px; 
+            z-index: 2000;
+            width: 44px; 
+            height: 44px; 
+            background: rgba(255,255,255,0.4);
+            border-radius: 50%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            cursor: pointer;
+            color: var(--primary-green);
+        }
+
+        /* 游戏运行层：强制全屏，无边框 */
+        #game-runtime { 
+            position: absolute; 
+            inset: 0; 
+            z-index: 500; 
+            display: none; 
+            background: white; 
+        }
+        #game-frame-wrap { width: 100%; height: 100%; overflow: hidden; position: relative; }
+        iframe { border: none; position: absolute; top: 0; height: 100%; }
+
+        /* 核心逻辑：单人 100% 铺满，双人 200% 偏移 */
+        .is-single #game-frame { width: 100%; left: 0; }
+        .is-double.side-left #game-frame { width: 200%; left: 0; }
+        .is-double.side-right #game-frame { width: 200%; left: -100%; }
+
+        /* 彩色菜单卡片 */
+        .color-card {
+            width: 80%; max-width: 280px; padding: 25px; border-radius: 20px;
+            margin-bottom: 15px; background: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+            display: flex; flex-direction: column; align-items: center;
+            cursor: pointer;
+        }
+        .card-icon { width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; color: white; }
+
+        /* 联机旋转层 */
+        .sync-layer { position: absolute; inset: 0; background: rgba(255,255,255,0.9); z-index: 1500; display: none; flex-direction: column; align-items: center; justify-content: center; }
+        .spinner { width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid var(--primary-green); border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        /* 初始层 */
+        #init-layer, #setup-layer { position: fixed; inset: 0; background: #E8F1EE; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .btn-ready { background: var(--primary-green); color: white; padding: 15px 50px; border-radius: 50px; font-weight: 900; border: none; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <!-- 1. 激活层 -->
+    <div id="init-layer">
+        <button onclick="startSystem()" class="btn-ready">点击开启智慧终端</button>
+    </div>
+
+    <!-- 2. 位置层 -->
+    <div id="setup-layer" style="display:none;">
+        <h2 class="text-lg font-black mb-10 text-stone-500">此屏幕的位置是？</h2>
+        <div class="flex flex-col gap-6 w-64">
+            <button onclick="saveSide('left')" class="btn-ready">左侧屏幕</button>
+            <button onclick="saveSide('right')" class="btn-ready" style="background:#7B8A8E">右侧屏幕</button>
+        </div>
+    </div>
+
+    <!-- 3. 运行舞台 -->
+    <div id="main-stage">
+        
+        <!-- 悬浮切换按钮 -->
+        <div id="manual-toggle" onclick="toggleModeManual()">
+            <i data-lucide="refresh-cw"></i>
+        </div>
+
+        <!-- 联机匹配 -->
+        <div id="sync-wait" class="sync-layer">
+            <div class="spinner mb-6"></div>
+            <p class="text-sm font-black text-stone-500">正在同步...</p>
+            <button onclick="cancelLaunch()" class="mt-10 text-xs text-stone-300 underline">取消</button>
+        </div>
+
+        <!-- 菜单：单人模式 (默认) -->
+        <div id="view-single" class="view-section active-view">
+            <h2 class="font-black mb-10 text-stone-300 tracking-[0.3em] text-[0.6rem]">个人模式</h2>
+            <div class="color-card" onclick="launch('single-htp')" style="border-bottom: 6px solid var(--pink)">
+                <div class="card-icon" style="background:var(--pink)"><i data-lucide="palette"></i></div>
+                <p class="font-black text-sm text-center">房树人心理绘测</p>
+            </div>
+            <div class="color-card" onclick="launch('single-book')" style="border-bottom: 6px solid var(--blue)">
+                <div class="card-icon" style="background:var(--blue)"><i data-lucide="book-open"></i></div>
+                <p class="font-black text-sm text-center">社区答案之书</p>
+            </div>
+        </div>
+
+        <!-- 菜单：双人模式 -->
+        <div id="view-double" class="view-section mode-double-ui">
+            <h2 class="font-black mb-10 text-stone-400 tracking-[0.3em] text-[0.6rem]">双人模式</h2>
+            <div class="color-card" onclick="launchDouble('double-cards')" style="border-bottom: 6px solid var(--green)">
+                <div class="card-icon" style="background:var(--green)"><i data-lucide="brain"></i></div>
+                <p class="font-black text-sm text-center">凑十记忆挑战</p>
+            </div>
+            <div class="color-card" onclick="launchDouble('double-sand')" style="border-bottom: 6px solid var(--yellow)">
+                <div class="card-icon" style="background:var(--yellow); color:#888"><i data-lucide="layout-grid"></i></div>
+                <p class="font-black text-sm text-center">社区共创沙盘</p>
+            </div>
+        </div>
+
+        <!-- 100% 填充运行层 -->
+        <div id="game-runtime">
+            <div id="game-frame-wrap" class="is-single">
+                <iframe id="game-frame" src=""></iframe>
+            </div>
+            <!-- 返回按钮 -->
+            <button class="absolute top-4 left-4 bg-white/60 p-2 rounded-full z-[2001]" onclick="exitGame()">
+                <i data-lucide="chevron-left" color="#8DB5AA"></i>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        let mySide = localStorage.getItem('tm_side');
+        let currentMode = 'single';
+        let isRunning = false;
+        let peer = null, conn = null;
+
+        function startSystem() {
+            document.getElementById('init-layer').style.display = 'none';
+            if (!mySide) document.getElementById('setup-layer').style.display = 'flex';
+            else activateTerminal();
+        }
+
+        function saveSide(side) {
+            localStorage.setItem('tm_side', side);
+            mySide = side;
+            document.getElementById('setup-layer').style.display = 'none';
+            activateTerminal();
+        }
+
+        async function activateTerminal() {
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try { await DeviceOrientationEvent.requestPermission(); } catch(e){}
+            }
+            window.addEventListener('deviceorientation', (e) => {
+                if (isRunning) return;
+                const beta = Math.abs(e.beta), gamma = Math.abs(e.gamma);
+                if (beta < 15 && gamma < 15) setMode('double');
+                else if (beta > 35) setMode('single');
+            });
+            updateUI();
+        }
+
+        function setMode(mode) {
+            if (currentMode === mode) return;
+            currentMode = mode;
+            updateUI();
+        }
+
+        function toggleModeManual() {
+            setMode(currentMode === 'single' ? 'double' : 'single');
+        }
+
+        function updateUI() {
+            document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active-view'));
+            const toggleBtn = document.getElementById('manual-toggle');
+
+            if (currentMode === 'single') {
+                document.getElementById('view-single').classList.add('active-view');
+            } else {
+                document.getElementById('view-double').classList.add('active-view');
+            }
+            toggleBtn.style.display = isRunning ? 'none' : 'flex';
+        }
+
+        function launchDouble(gameId) {
+            document.getElementById('sync-wait').style.display = 'flex';
+            startNetwork(gameId);
+        }
+
+        function startNetwork(gameId) {
+            if (peer) peer.destroy();
+            peer = new Peer(`tm-v8-${mySide}`);
+            peer.on('open', () => {
+                const target = mySide === 'left' ? `tm-v8-right` : `tm-v8-left`;
+                const connector = setInterval(() => {
+                    if (conn || isRunning || !peer) { clearInterval(connector); return; }
+                    conn = peer.connect(target);
+                    if(conn) setupConn(gameId);
+                }, 1500);
+            });
+            peer.on('connection', (c) => { if (conn) return; conn = c; setupConn(gameId); });
+        }
+
+        function setupConn(gameId) {
+            conn.on('open', () => { if (gameId) conn.send({ type: 'LAUNCH', gameId: gameId }); });
+            conn.on('data', (data) => {
+                if (data.type === 'LAUNCH') doLaunch(data.gameId);
+                if (data.type === 'EXIT') doExit();
+            });
+        }
+
+        function cancelLaunch() {
+            document.getElementById('sync-wait').style.display = 'none';
+            if (peer) { peer.destroy(); peer = null; }
+            conn = null;
+        }
+
+        function launch(gameId) { doLaunch(gameId); }
+
+        function doLaunch(gameId) {
+            isRunning = true;
+            document.getElementById('sync-wait').style.display = 'none';
+            const frame = document.getElementById('game-frame');
+            const wrap = document.getElementById('game-frame-wrap');
+            const runtime = document.getElementById('game-runtime');
+            
+            const urls = {
+                'single-htp': 'htp_latest.html', 'single-book': 'book_of_answers.html',
+                'double-cards': 'make_ten.html', 'double-sand': 'sandtray.html'
+            };
+            
+            frame.src = urls[gameId];
+            runtime.style.display = 'block';
+            
+            // 彻底去除边框和偏移逻辑：
+            // 单人：wrap为is-single -> frame 100% 居中
+            // 双人：wrap为is-double + side-left/right -> frame 200% 偏移
+            wrap.className = (currentMode === 'single' ? 'is-single' : 'is-double') + ` side-${mySide}`;
+            
+            updateUI();
+        }
+
+        function exitGame() {
+            if (conn) conn.send({ type: 'EXIT' });
+            doExit();
+        }
+
+        function doExit() {
+            isRunning = false;
+            document.getElementById('game-runtime').style.display = 'none';
+            document.getElementById('game-frame').src = "";
+            if (peer) { peer.destroy(); peer = null; }
+            conn = null;
+            updateUI();
+        }
+    </script>
+</body>
+</html>

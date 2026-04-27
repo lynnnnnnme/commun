@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>社区时光机 - 稳定版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 引入全套简体中文字体 */
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@500;700;900&family=Klee+One:wght@600&family=Zhi+Mang+Xing&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            background: #E8F1EE; 
+            height: 100vh; width: 100vw; 
+            display: flex; align-items: center; justify-content: center; 
+            overflow: hidden; font-family: 'Noto Sans SC', sans-serif; 
+            touch-action: none; 
+        }
+
+        /* 4:3 核心容器 - 严格保持原有比例 */
+        #tablet-stage {
+            position: relative;
+            width: 75vh; height: 100vh; 
+            max-width: 100vw;
+            background: #F3EEEA;
+            overflow: hidden;
+            box-shadow: 0 40px 100px rgba(0,0,0,0.1);
+            border: 10px solid #FFFFFF;
+            border-radius: 40px;
+            perspective: 2500px;
+        }
+
+        /* --- 场景管理 --- */
+        .scene { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; }
+        .active-scene { display: flex !important; animation: sceneFade 0.6s ease forwards; }
+        @keyframes sceneFade { from { opacity: 0; } to { opacity: 1; } }
+
+        /* --- 绝对定位引导语 (不干扰布局) --- */
+        .bottom-guide {
+            position: absolute;
+            bottom: 40px;
+            left: 0; width: 100%;
+            text-align: center;
+            color: #111;
+            opacity: 0.15; /* 极低透明度 */
+            font-weight: 900;
+            font-size: 0.9rem;
+            letter-spacing: 0.3em;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        /* --- 场景一：大轮盘 (严格沿用之前代码) --- */
+        @keyframes entrance-sweep {
+            from { transform: rotate(50deg); opacity: 0; }
+            to { transform: rotate(0deg); opacity: 1; }
+        }
+        #wheel-pivot { position: absolute; bottom: -150px; left: 50%; width: 1px; height: 1px; animation: entrance-sweep 5.0s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+        .card { position: absolute; bottom: 0; left: -60px; width: 120px; height: 180px; transform-origin: center 600px; top: -600px; cursor: pointer; transform-style: preserve-3d; transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1.2); }
+        .card-inner { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+        .card-face { position: absolute; inset: 0; backface-visibility: hidden; border-radius: 15px; border: 1.5px solid #E5E1DE; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 15px rgba(0,0,0,0.05); }
+        .card-front { transform: rotateY(180deg); }
+        .card-picked { z-index: 5000 !important; }
+        .card-picked .card-inner { transform: rotateY(180deg) translateY(-80px); }
+
+        /* --- 实体卡片 (200x300) --- */
+        .physical-card {
+            width: 200px; height: 300px; border-radius: 20px;
+            padding: 25px 20px; display: flex; flex-direction: column;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.1); position: relative;
+            transition: all 0.6s ease;
+        }
+        .quote-mark { font-size: 2.5rem; color: #111; font-weight: 900; font-family: serif; line-height: 1; }
+        .main-message { font-family: 'Klee One', serif; font-size: 1.35rem; color: #111; font-weight: 900; margin: 10px 0; text-align: center; line-height: 1.4; }
+        .signature-area { margin-top: auto; align-self: center; display: flex; flex-direction: column; align-items: center; }
+        .author-name { font-family: 'Zhi Mang Xing', cursive; font-size: 1.8rem; color: #111; border-bottom: 3.5px solid #111; padding: 0 8px; line-height: 1; }
+
+        /* --- 统一按钮：白底黑框 --- */
+        .btn-minimal { 
+            width: 280px; background: #FFFFFF; color: #111111; padding: 14px 0; border-radius: 20px; 
+            font-size: 1.1rem; font-weight: 900; border: 3px solid #111111; 
+            cursor: pointer; transition: all 0.2s; box-shadow: 0 5px 0 #111111; margin-bottom: 15px;
+            text-align: center;
+        }
+        .btn-minimal:active { transform: translateY(4px); box-shadow: 0 1px 0 #111111; }
+
+        .category-tab { padding: 10px 25px; border-radius: 50px; font-size: 0.85rem; font-weight: 900; cursor: pointer; transition: all 0.2s; }
+        .tab-active { background: #111; color: #FFF; box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
+        .tab-inactive { background: #FFF; color: #999; border: 1px solid #E5E1DE; }
+
+        .tactile-tool { display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 12px 25px; border-radius: 18px; background: #FFFFFF; border: 2px solid #111; box-shadow: 0 4px 0 #111; }
+        .tactile-tool:active { transform: translateY(3px); box-shadow: 0 0px 0 #111; }
+        .icon-svg { width: 22px; height: 22px; stroke: #111; stroke-width: 3; fill: none; }
+        #ink-canvas { position: absolute; inset: 0; z-index: 100; cursor: crosshair; }
+        .handdraw-line { border-bottom: 2px solid rgba(0,0,0,0.05); margin: 12px 0; width: 85%; align-self: center; }
+
+        #feedback-layer { position: fixed; inset: 0; z-index: 6000; display: none; background: #F3EEEA; flex-direction: column; align-items: center; justify-content: center; }
+    </style>
+</head>
+<body>
+
+    <div id="tablet-stage">
+        
+        <!-- 场景一 -->
+        <section id="scene-1" class="scene active-scene">
+            <div class="absolute top-20 w-full text-center px-10">
+                <h1 class="text-[#111] text-4xl font-black mb-3 tracking-tighter">寻觅邻里的生活智慧</h1>
+                <p class="text-stone-400 font-bold text-sm">每一张卡片，都是一段社区记忆</p>
+                <div class="flex justify-center gap-3 mt-8">
+                    <div id="tab-all" class="category-tab tab-active" onclick="refreshDeck('all')">全部</div>
+                    <div id="tab-warm" class="category-tab tab-inactive" onclick="refreshDeck('warm')">温暖</div>
+                </div>
+            </div>
+            <div id="wheel-pivot"></div>
+            <!-- 引导语 -->
+            <div class="bottom-guide">轻点彩色卡片 · 开启邻里对话</div>
+        </section>
+
+        <!-- 场景二 -->
+        <section id="scene-2" class="scene">
+            <div class="text-stone-400 font-black mb-8 uppercase tracking-[0.3em] text-[10px]">今日社区回响</div>
+            <div class="physical-card" id="res-card-bg">
+                <div class="quote-mark" style="align-self: flex-start;">“</div>
+                <div class="main-message flex-1 flex items-center justify-center" id="display-msg"></div>
+                <div class="quote-mark" style="align-self: flex-end; margin-top: -10px;">”</div>
+                <div class="signature-area">
+                    <span class="text-[10px] font-bold text-stone-500 italic">by</span>
+                    <span class="author-name" id="display-author"></span>
+                </div>
+            </div>
+            <div class="flex flex-col mt-12">
+                <button onclick="goToScene(3)" class="btn-minimal">我也要留下社区答案</button>
+                <button onclick="resetToWheel()" class="btn-minimal" style="font-size: 0.95rem;">再抽一次</button>
+            </div>
+            <!-- 引导语 -->
+            <div class="bottom-guide">静心阅读 · 领受这份社区善意</div>
+        </section>
+
+        <!-- 场景三 -->
+        <section id="scene-3" class="scene">
+            <div class="flex gap-4 mb-8">
+                <div class="tactile-tool" onclick="startVoice()">
+                    <svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg>
+                    <span class="font-black text-[#111]">语音签名</span>
+                </div>
+                <div class="tactile-tool" onclick="clearInk()">
+                    <svg class="icon-svg" viewBox="0 0 24 24"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                    <span class="font-black text-[#111]">重写</span>
+                </div>
+            </div>
+            <div class="physical-card" id="writing-card-bg">
+                <canvas id="ink-canvas"></canvas>
+                <div class="quote-mark" style="align-self: flex-start;">“</div>
+                <div class="flex-1 flex flex-col justify-center space-y-4"><div class="handdraw-line"></div><div class="handdraw-line"></div></div>
+                <div class="quote-mark" style="align-self: flex-end;">”</div>
+                <div class="signature-area pb-4">
+                    <span class="text-[10px] font-bold text-stone-500 italic">by</span>
+                    <div id="voice-name-box" class="author-name min-h-[40px] min-w-[100px] text-center"></div>
+                </div>
+            </div>
+            <button onclick="archiveProcess()" class="btn-minimal mt-10" style="background: #F57D7D; color: white;">完成并存档</button>
+            <!-- 引导语 -->
+            <div class="bottom-guide">书写感悟 · 成为他人的微光</div>
+        </section>
+
+        <!-- 存档反馈 -->
+        <div id="feedback-layer">
+            <div id="feedback-circle" class="w-24 h-24 rounded-full flex items-center justify-center mb-6 shadow-2xl border-4 border-white">
+                <svg id="success-icon" class="icon-svg" style="width:48px; height:48px; stroke:white;" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            </div>
+            <h2 class="text-[#111] text-3xl font-black tracking-widest">存档成功</h2>
+        </div>
+
+    </div>
+
+    <script>
+        const COMMUNITY_POOL = [
+            { t: "看着眼前<br>的苹果", a: "张阿姨" },
+            { t: "慢慢走，<br>灵魂才跟得上", a: "社区老张" },
+            { t: "记得喝水，<br>照顾好自己", a: "邻居小花" }
+        ];
+
+        const PALETTE = ["#F5D1D1", "#B8E4D5", "#D8B4FE", "#F9E2AF", "#BAE2FF"];
+        let pickedColor = "";  
+        let writingColor = ""; 
+
+        function goToScene(index) {
+            document.querySelectorAll('.scene').forEach(s => { s.classList.remove('active-scene'); s.style.display = 'none'; });
+            const target = document.getElementById(`scene-${index}`);
+            target.style.display = 'flex';
+            setTimeout(() => target.classList.add('active-scene'), 10);
+            if (index === 3) {
+                let available = PALETTE.filter(c => c !== pickedColor);
+                writingColor = available[Math.floor(Math.random() * available.length)];
+                document.getElementById('writing-card-bg').style.background = writingColor;
+                setTimeout(initInk, 500);
+            }
+        }
+
+        function refreshDeck(type) {
+            document.getElementById('tab-all').className = type === 'all' ? 'category-tab tab-active' : 'category-tab tab-inactive';
+            document.getElementById('tab-warm').className = type === 'warm' ? 'category-tab tab-active' : 'category-tab tab-inactive';
+            const pivot = document.getElementById('wheel-pivot');
+            pivot.innerHTML = '';
+            pivot.style.animation = 'none';
+            pivot.offsetHeight; 
+            pivot.style.animation = 'entrance-sweep 5.0s cubic-bezier(0.2, 0.8, 0.2, 1) forwards';
+            initWheel();
+        }
+
+        function resetToWheel() { goToScene(1); refreshDeck('all'); }
+
+        function archiveProcess() {
+            const card = document.getElementById('writing-card-bg');
+            const feedback = document.getElementById('feedback-layer');
+            card.style.transform = "scale(0.8) translateY(-100px)"; card.style.opacity = "0";
+            document.getElementById('feedback-circle').style.background = writingColor;
+            setTimeout(() => { feedback.style.display = 'flex'; setTimeout(() => location.reload(), 2500); }, 600);
+        }
+
+        function initWheel() {
+            const pivot = document.getElementById('wheel-pivot');
+            const total = 42; const startAngle = 60; const angleStep = -2.85; 
+            for (let i = 0; i < total; i++) {
+                const card = document.createElement('div');
+                card.className = 'card';
+                const angle = startAngle + (i * angleStep); 
+                card.style.setProperty('--r', `${angle}deg`);
+                card.style.transform = `rotate(${angle}deg)`;
+                card.style.zIndex = i; 
+                const myColor = PALETTE[Math.floor(Math.random() * PALETTE.length)];
+                card.innerHTML = `<div class="card-inner"><div class="card-face card-back" style="background:${myColor}"></div><div class="card-face card-front" style="background:${myColor}">✨</div></div>`;
+                card.onclick = () => {
+                    pickedColor = myColor;
+                    card.classList.add('card-picked');
+                    const data = COMMUNITY_POOL[Math.floor(Math.random() * COMMUNITY_POOL.length)];
+                    document.getElementById('display-msg').innerHTML = data.t;
+                    document.getElementById('display-author').innerText = data.a;
+                    document.getElementById('res-card-bg').style.background = pickedColor;
+                    setTimeout(() => goToScene(2), 1200);
+                };
+                pivot.appendChild(card);
+            }
+        }
+
+        let canvas, ctx, drawing = false;
+        function initInk() {
+            canvas = document.getElementById('ink-canvas');
+            ctx = canvas.getContext('2d');
+            canvas.width = 200; canvas.height = 300; 
+            ctx.strokeStyle = '#111'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+            const getPos = (e) => {
+                const r = canvas.getBoundingClientRect();
+                return { x: (e.clientX || e.touches[0].clientX) - r.left, y: (e.clientY || e.touches[0].clientY) - r.top };
+            };
+            canvas.onmousedown = (e) => { drawing = true; ctx.beginPath(); const p = getPos(e); ctx.moveTo(p.x, p.y); };
+            canvas.onmousemove = (e) => { if(!drawing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); };
+            window.onmouseup = () => drawing = false;
+            canvas.ontouchstart = (e) => { e.preventDefault(); drawing = true; ctx.beginPath(); const p = getPos(e.touches[0]); ctx.moveTo(p.x, p.y); };
+            canvas.ontouchmove = (e) => { e.preventDefault(); if(!drawing) return; const p = getPos(e.touches[0]); ctx.lineTo(p.x, p.y); ctx.stroke(); };
+        }
+        function clearInk() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+
+        function startVoice() {
+            const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if(!Speech) return alert("不支持语音");
+            const rec = new Speech();
+            rec.lang = 'zh-CN';
+            rec.onstart = () => document.getElementById('voice-name-box').innerText = "...聆听中...";
+            rec.onresult = (e) => document.getElementById('voice-name-box').innerText = e.results[0][0].transcript;
+            rec.start();
+        }
+        window.onload = initWheel;
+    </script>
+</body>
+</html>

@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>社区沙盘 - 稳定最终修复版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@700;900&family=Klee+One:wght@600&display=swap');
+        :root {
+            --primary-green: #8DB5AA;
+            --soft-beige: #F3EEEA;
+            --dark-grey: #525252;
+            --light-grey: #AFAFAF;
+            --mc-slot-bg: rgba(255, 255, 255, 0.95);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; }
+        body { background: #E8F1EE; height: 100vh; width: 100vw; overflow: hidden; font-family: 'Noto Sans SC', sans-serif; color: var(--dark-grey); touch-action: none; }
+
+        #tablet-stage {
+            position: relative; margin: auto;
+            height: 98vh; aspect-ratio: 3 / 8;
+            background: var(--soft-beige); border-radius: 40px; border: 6px solid white;
+            box-shadow: 0 40px 100px rgba(0,0,0,0.05); overflow: hidden;
+        }
+
+        /* 玩家区域 */
+        .ui-zone {
+            position: absolute; left: 0; width: 100%; height: 38%;
+            z-index: 100; padding: 15px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        .p2-pos { top: 0; transform: rotate(180deg); }
+        .p1-pos { bottom: 0; }
+
+        .overlay-layer {
+            position: absolute; inset: 0; background: white; z-index: 500;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center;
+        }
+
+        /* 绘画完成后的等待旋转弹窗 */
+        .finish-wait-popup {
+            position: absolute; inset: 0; background: rgba(255, 255, 255, 0.95);
+            z-index: 700; display: none; flex-direction: column; align-items: center; justify-content: center;
+            border-radius: 30px; backdrop-filter: blur(8px);
+        }
+        .spinner { width: 32px; height: 32px; border: 3.5px solid #F0F0F0; border-top: 3.5px solid var(--primary-green); border-radius: 50%; animation: spin 1.2s linear infinite; margin-bottom: 12px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* 沙盘引导页 - 缩小 0.6 倍 */
+        .tutorial-layer {
+            position: absolute; inset: 0; background: rgba(255,255,255,0.9); z-index: 800;
+            display: none; flex-direction: column; align-items: center; justify-content: center; padding: 15px;
+        }
+        .tut-content { transform: scale(0.7); display: flex; flex-direction: column; align-items: center; text-align: center; }
+
+        /* 分类选择按钮 */
+        .cat-btn {
+            width: 100px; height: 125px; border-radius: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            font-weight: 900; font-size: 0.75rem; cursor: pointer; transition: all 0.3s;
+            background: #FDFDFD; color: var(--light-grey); border: 2px solid #F3F3F3;
+        }
+        .cat-btn.selected { border-color: var(--primary-green); background: #F4F9F8; color: var(--primary-green); }
+        .cat-btn.locked { opacity: 0.15; pointer-events: none; }
+
+        /* 任务气泡 */
+        .item-orb {
+            aspect-ratio: 1; border-radius: 50%; background: white;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.6rem; font-weight: bold; color: var(--light-grey);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.03); cursor: pointer; overflow: hidden;
+        }
+        .item-orb.done { border: 2px solid var(--primary-green); color: var(--primary-green); }
+        .item-orb img { width: 85%; height: 85%; object-fit: contain; }
+
+        /* 画板弹窗 */
+        .draw-modal {
+            position: absolute; inset: 10px; background: white; border-radius: 35px;
+            display: none; flex-direction: column; box-shadow: 0 15px 45px rgba(0,0,0,0.1); z-index: 600; padding: 15px;
+        }
+        .modal-nav { height: 45px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; width: 100%; }
+        .nav-btn { width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .btn-undo { background: #F5F5F5; }
+        .btn-submit { background: var(--primary-green); box-shadow: 0 4px 10px rgba(141,181,170,0.3); }
+
+        .canvas-wrap { flex-grow: 1; width: 100%; margin: 8px 0; min-height: 0; background: #FAFAFA; border-radius: 20px; border: 1px solid #F0F0F0; overflow: hidden; }
+        canvas { width: 100%; height: 100%; touch-action: none; display: block; }
+
+        .tool-bar { width: 100%; padding: 5px 0; flex-shrink: 0; display: flex; flex-direction: column; gap: 12px; }
+        .abandon-link { text-align: center; color: #CCC; font-size: 0.65rem; font-weight: bold; cursor: pointer; margin-bottom: 5px; }
+
+        /* 素材栏 */
+        .inv-bar {
+            position: absolute; left: 15px; right: 15px; height: 60px;
+            background: transparent; display: none; align-items: flex-end; 
+            padding: 0 5px 2px 5px; overflow-x: auto; gap: 10px; z-index: 150;
+        }
+        .inv-slot-wrapper { display: flex; flex-direction: column; align-items: center; gap: 1px; flex-shrink: 0; }
+        .inv-slot-name { font-size: 0.45rem; font-weight: 900; color: var(--dark-grey); opacity: 0.7; transform: translateY(2px); }
+        .inv-box {
+            width: 32px; height: 32px; background: var(--mc-slot-bg);
+            border: 1.5px solid #D1D5DB; border-radius: 6px;
+            box-shadow: 1px 1px 4px rgba(0,0,0,0.05);
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+        }
+        .inv-box img { width: 22px; height: 22px; object-fit: contain; }
+
+        input[type=range] { -webkit-appearance: none; width: 100%; height: 8px; border-radius: 10px; background: #EEE; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 26px; height: 26px; border-radius: 50%; background: white; border: 3px solid var(--primary-green); }
+        .color-slider { background: linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000) !important; }
+        .btn-green { background: var(--primary-green); color: white; padding: 8px 25px; border-radius: 50px; font-weight: 900; font-size: 0.8rem; border: none; }
+        
+        #sandbox-world { position: absolute; inset: 0; z-index: 1; }
+        .entity { position: absolute; width: 80px; height: 80px; cursor: move; touch-action: none; z-index: 10; transform-origin: center center; }
+    </style>
+</head>
+<body>
+
+<div id="tablet-stage">
+    <div id="sandbox-world"></div>
+
+    <!-- P2 操作区 -->
+    <div id="p2-zone" class="ui-zone p2-pos">
+        <div id="p2-tutorial" class="tutorial-layer"></div>
+        <div id="p2-wait" class="finish-wait-popup"><div class="spinner"></div><p class="text-xs font-bold text-stone-400">正在等待邻居完成绘画</p></div>
+        <div id="p2-rules" class="overlay-layer">
+            <h2 class="font-black text-lg mb-2">沙盘创作规则</h2>
+            <p class="text-[0.7rem] leading-relaxed text-stone-400 px-4">协商选择不同类别绘画<br>完成后画作会互相共享<br>共同装扮你们的社区沙盘！</p>
+            <button onclick="hideRules('p2')" class="btn-green mt-6">进入游戏</button>
+        </div>
+        <div id="p2-select" class="overlay-layer hidden">
+            <p class="text-xs font-black mb-6">请选择负责的类别</p>
+            <div class="flex gap-6">
+                <div id="p2-btn-nature" onclick="pick('p2','nature')" class="cat-btn"><i data-lucide="leaf" size="40"></i>自然之物</div>
+                <div id="p2-btn-life" onclick="pick('p2','life')" class="cat-btn"><i data-lucide="home" size="40"></i>人造之物</div>
+            </div>
+            <button id="p2-confirm-btn" onclick="confirmCat('p2')" class="btn-green mt-8 opacity-20 pointer-events-none">我选好了</button>
+        </div>
+        <div id="p2-list" class="hidden w-full h-full flex flex-col items-center justify-center">
+            <div class="flex justify-between w-full px-4 mb-4">
+                <span class="text-[0.65rem] font-black text-stone-300">P2 任务清单</span>
+                <button onclick="finishDrawing('p2')" class="text-[0.65rem] font-black text-[#8DB5AA] border-b-2 border-[#8DB5AA]">全部完成</button>
+            </div>
+            <div id="p2-bubbles" class="grid grid-cols-4 gap-2 w-full justify-center px-4"></div>
+        </div>
+        <div id="p2-modal" class="draw-modal">
+            <div class="modal-nav">
+                <div onclick="undo('p2')" class="nav-btn btn-undo"><i data-lucide="rotate-ccw" size="20" color="#525252"></i></div>
+                <span id="p2-draw-title" class="text-xs font-black text-stone-400">正在绘制</span>
+                <div onclick="saveDraw('p2')" class="nav-btn btn-submit"><i data-lucide="check" size="28" color="white"></i></div>
+            </div>
+            <div class="canvas-wrap"><canvas id="canvas-p2"></canvas></div>
+            <div class="tool-bar"><input type="range" class="color-slider" min="0" max="360" value="180" oninput="updatePen('p2','h',this.value)"><input type="range" min="1" max="12" value="3" oninput="updatePen('p2','s',this.value)"></div>
+            <div class="abandon-link" onclick="closeDraw('p2')">放弃绘画</div>
+        </div>
+    </div>
+
+    <!-- P1 操作区 -->
+    <div id="p1-zone" class="ui-zone p1-pos">
+        <div id="p1-tutorial" class="tutorial-layer"></div>
+        <div id="p1-wait" class="finish-wait-popup"><div class="spinner"></div><p class="text-xs font-bold text-stone-400">正在等待邻居完成绘画</p></div>
+        <div id="p1-rules" class="overlay-layer">
+            <h2 class="font-black text-lg mb-2">沙盘创作规则</h2>
+            <p class="text-[0.7rem] leading-relaxed text-stone-400 px-4">协商选择不同类别绘画<br>完成后画作会互相共享<br>共同装扮你们的社区沙盘！</p>
+            <button onclick="hideRules('p1')" class="btn-green mt-6">进入游戏</button>
+        </div>
+        <div id="p1-select" class="overlay-layer hidden">
+            <p class="text-xs font-black mb-6">请选择负责的类别</p>
+            <div class="flex gap-6">
+                <div id="p1-btn-nature" onclick="pick('p1','nature')" class="cat-btn"><i data-lucide="leaf" size="40"></i>自然之物</div>
+                <div id="p1-btn-life" onclick="pick('p1','life')" class="cat-btn"><i data-lucide="home" size="40"></i>人造之物</div>
+            </div>
+            <button id="p1-confirm-btn" onclick="confirmCat('p1')" class="btn-green mt-8 opacity-20 pointer-events-none">我选好了</button>
+        </div>
+        <div id="p1-list" class="hidden w-full h-full flex flex-col items-center justify-center">
+            <div class="flex justify-between w-full px-4 mb-4">
+                <span class="text-[0.65rem] font-black text-stone-300">P1 任务清单</span>
+                <button onclick="finishDrawing('p1')" class="text-[0.65rem] font-black text-[#8DB5AA] border-b-2 border-[#8DB5AA]">全部完成</button>
+            </div>
+            <div id="p1-bubbles" class="grid grid-cols-4 gap-2 w-full justify-center px-4"></div>
+        </div>
+        <div id="p1-modal" class="draw-modal">
+            <div class="modal-nav">
+                <div onclick="undo('p1')" class="nav-btn btn-undo"><i data-lucide="rotate-ccw" size="20" color="#525252"></i></div>
+                <span id="p1-draw-title" class="text-xs font-black text-stone-400">正在绘制</span>
+                <div onclick="saveDraw('p1')" class="nav-btn btn-submit"><i data-lucide="check" size="28" color="white"></i></div>
+            </div>
+            <div class="canvas-wrap"><canvas id="canvas-p1"></canvas></div>
+            <div class="tool-bar"><input type="range" class="color-slider" min="0" max="360" value="180" oninput="updatePen('p1','h',this.value)"><input type="range" min="1" max="12" value="3" oninput="updatePen('p1','s',this.value)"></div>
+            <div class="abandon-link" onclick="closeDraw('p1')">放弃绘画</div>
+        </div>
+    </div>
+
+    <!-- 素材栏 -->
+    <div id="p2-inv" class="inv-bar p2-pos" style="top:15px;"></div>
+    <div id="p1-inv" class="inv-bar p1-pos" style="bottom:15px;"></div>
+</div>
+
+<script>
+    lucide.createIcons();
+    const ITEMS = {
+        nature: ["花朵", "小树", "石头", "小草", "云朵", "小鸟", "河流", "月亮"],
+        life: ["房子", "路灯", "桌椅", "小车", "书本", "桥梁", "气球", "礼物"]
+    };
+    const TUTORIAL_DATA = [
+        { icon: "mouse-pointer-2", title: "移动物品", text: "单指点击并拖拽物品，\n改变沙盘中的位置。" },
+        { icon: "maximize-2", title: "调整大小", text: "双指在物品上张开或合拢，\n可以放大或缩小。" },
+        { icon: "rotate-cw", title: "旋转方向", text: "双指按住物品并旋转，\n改变物品的朝向。" }
+    ];
+
+    let syncState = {
+        p1: { picked: null, confirmed: false, drawings: {}, isFinished: false, tutorialPage: 0 },
+        p2: { picked: null, confirmed: false, drawings: {}, isFinished: false, tutorialPage: 0 }
+    };
+    let drawHistory = { p1: [], p2: [] };
+    let brush = { p1: {h:180, s:3, active: false}, p2: {h:180, s:3, active: false} };
+
+    function hideRules(p) {
+        document.getElementById(`${p}-rules`).style.display = 'none';
+        document.getElementById(`${p}-select`).classList.remove('hidden');
+    }
+
+    function pick(p, cat) {
+        syncState[p].picked = cat;
+        const btn = document.getElementById(`${p}-confirm-btn`);
+        document.querySelectorAll(`#${p}-select .cat-btn`).forEach(b => b.classList.remove('selected'));
+        document.getElementById(`${p}-btn-${cat}`).classList.add('selected');
+        btn.classList.remove('opacity-20', 'pointer-events-none');
+        const other = p === 'p1' ? 'p2' : 'p1';
+        document.getElementById(`${other}-btn-nature`).classList.remove('locked');
+        document.getElementById(`${other}-btn-life`).classList.remove('locked');
+        document.getElementById(`${other}-btn-${cat}`).classList.add('locked');
+    }
+
+    function confirmCat(p) {
+        syncState[p].confirmed = true;
+        document.getElementById(`${p}-confirm-btn`).innerText = "正在等邻居...";
+        if (syncState.p1.confirmed && syncState.p2.confirmed) startDrawingPhase();
+    }
+
+    function startDrawingPhase() {
+        ['p1', 'p2'].forEach(p => {
+            document.getElementById(`${p}-select`).style.display = 'none';
+            document.getElementById(`${p}-list`).classList.remove('hidden');
+            const grid = document.getElementById(`${p}-bubbles`);
+            grid.innerHTML = "";
+            ITEMS[syncState[p].picked].forEach(name => {
+                const orb = document.createElement('div');
+                orb.className = 'item-orb';
+                orb.id = `orb-${p}-${name}`; orb.innerText = name;
+                orb.onclick = () => openDraw(p, name);
+                grid.appendChild(orb);
+            });
+        });
+    }
+
+    // 核心稳定绘画逻辑
+    const canvases = { p1: document.getElementById('canvas-p1'), p2: document.getElementById('canvas-p2') };
+    const ctxs = { p1: canvases.p1.getContext('2d'), p2: canvases.p2.getContext('2d') };
+
+    Object.keys(canvases).forEach(p => {
+        const cvs = canvases[p];
+        const ctx = ctxs[p];
+        
+        const getXY = (e) => {
+            const r = cvs.getBoundingClientRect();
+            const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+            const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+            // P2 镜像坐标修复
+            if(p === 'p2') return { x: r.right - clientX, y: r.bottom - clientY };
+            return { x: clientX - r.left, y: clientY - r.top };
+        };
+
+        const startDraw = (e) => {
+            e.preventDefault();
+            saveHistory(p);
+            brush[p].active = true;
+            ctx.strokeStyle = `hsl(${brush[p].h}, 60%, 45%)`;
+            ctx.lineWidth = brush[p].s;
+            ctx.lineCap = "round"; ctx.lineJoin = "round";
+            const pos = getXY(e);
+            ctx.beginPath();
+            ctx.moveTo(pos.x, pos.y);
+            cvs.setPointerCapture(e.pointerId || 1);
+        };
+
+        const moveDraw = (e) => {
+            if(!brush[p].active) return;
+            const pos = getXY(e);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+        };
+
+        const endDraw = () => { brush[p].active = false; };
+
+        cvs.addEventListener('pointerdown', startDraw, { passive: false });
+        cvs.addEventListener('pointermove', moveDraw, { passive: false });
+        cvs.addEventListener('pointerup', endDraw);
+        cvs.addEventListener('pointercancel', endDraw);
+    });
+
+    function openDraw(p, name) {
+        syncState[p].activeItem = name;
+        document.getElementById(`${p}-draw-title`).innerText = name;
+        document.getElementById(`${p}-modal`).style.display = 'flex';
+        // 关键：延迟确保 Modal 布局完成
+        setTimeout(() => {
+            const cvs = canvases[p];
+            const wrap = cvs.parentElement;
+            cvs.width = wrap.clientWidth;
+            cvs.height = wrap.clientHeight;
+            ctxs[p].clearRect(0,0,cvs.width, cvs.height);
+            drawHistory[p] = [];
+        }, 30);
+    }
+
+    function updatePen(p, type, val) { brush[p][type] = val; }
+    function saveHistory(p) {
+        const cvs = canvases[p];
+        if(drawHistory[p].length > 20) drawHistory[p].shift();
+        drawHistory[p].push(ctxs[p].getImageData(0,0,cvs.width, cvs.height));
+    }
+    function undo(p) { if(drawHistory[p].length > 0) ctxs[p].putImageData(drawHistory[p].pop(), 0,0); }
+    function closeDraw(p) { document.getElementById(`${p}-modal`).style.display = 'none'; }
+
+    function saveDraw(p) {
+        const url = canvases[p].toDataURL();
+        syncState[p].drawings[syncState[p].activeItem] = url;
+        const orb = document.getElementById(`orb-${p}-${syncState[p].activeItem}`);
+        orb.classList.add('done'); orb.innerHTML = `<img src="${url}">`;
+        closeDraw(p);
+    }
+
+    function finishDrawing(p) {
+        syncState[p].isFinished = true;
+        document.getElementById(`${p}-wait`).style.display = 'flex';
+        if(syncState.p1.isFinished && syncState.p2.isFinished) {
+            document.getElementById('p1-wait').style.display = 'none';
+            document.getElementById('p2-wait').style.display = 'none';
+            showTutorial();
+        }
+    }
+
+    function showTutorial() {
+        ['p1', 'p2'].forEach(p => {
+            document.getElementById(`${p}-list`).style.display = 'none';
+            renderTutorialPage(p);
+        });
+    }
+
+    function renderTutorialPage(p) {
+        const page = syncState[p].tutorialPage;
+        const data = TUTORIAL_DATA[page];
+        const layer = document.getElementById(`${p}-tutorial`);
+        layer.style.display = 'flex';
+        layer.innerHTML = `
+            <div class="tut-content">
+                <div class="mb-3 bg-stone-50 p-4 rounded-full text-[#8DB5AA]"><i data-lucide="${data.icon}" size="32"></i></div>
+                <h3 class="text-base font-black mb-1">${data.title}</h3>
+                <p class="text-stone-400 font-bold whitespace-pre-wrap mb-6 text-[0.65rem] leading-tight">${data.text}</p>
+                <button onclick="nextTutorial('${p}')" class="btn-green !py-2 !px-8 !text-[0.7rem]">${page < 2 ? '好的' : '开启沙盘'}</button>
+            </div>
+        `;
+        lucide.createIcons();
+    }
+
+    function nextTutorial(p) {
+        if (syncState[p].tutorialPage < 2) {
+            syncState[p].tutorialPage++;
+            renderTutorialPage(p);
+        } else {
+            document.getElementById(`${p}-tutorial`).style.display = 'none';
+            checkAllTutorialDone();
+        }
+    }
+
+    let tutorialReadyCount = 0;
+    function checkAllTutorialDone() {
+        tutorialReadyCount++;
+        if(tutorialReadyCount >= 2) startSandbox();
+    }
+
+    function startSandbox() {
+        document.querySelectorAll('.ui-zone').forEach(el => el.style.display = 'none');
+        const allDraws = [...Object.entries(syncState.p1.drawings).map(([name, url]) => ({name, url})), ...Object.entries(syncState.p2.drawings).map(([name, url]) => ({name, url}))];
+        ['p1','p2'].forEach(p => {
+            const inv = document.getElementById(`${p}-inv`);
+            inv.style.display = 'flex';
+            inv.innerHTML = "";
+            allDraws.forEach(item => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'inv-slot-wrapper';
+                wrapper.innerHTML = `<span class="inv-slot-name">${item.name}</span><div class="inv-box"><img src="${item.url}"></div>`;
+                wrapper.onclick = () => spawn(item.url, p);
+                inv.appendChild(wrapper);
+            });
+        });
+    }
+
+    function spawn(url, p) {
+        const img = document.createElement('img');
+        img.src = url; img.className = 'entity';
+        img.style.left = '40%'; img.style.top = p === 'p1' ? '75%' : '15%';
+        img.dataset.scale = 1; img.dataset.rotate = 0;
+        document.getElementById('sandbox-world').appendChild(img);
+        attachSmartGestures(img);
+    }
+
+    function attachSmartGestures(el) {
+        let activePointers = {};
+        let initialDist = 0, initialAngle = 0, startScale = 1, startRotation = 0;
+        el.addEventListener('pointerdown', (e) => {
+            e.preventDefault(); activePointers[e.pointerId] = e;
+            el.setPointerCapture(e.pointerId); el.style.zIndex = 1000;
+            const keys = Object.keys(activePointers);
+            if (keys.length === 2) {
+                const p1 = activePointers[keys[0]], p2 = activePointers[keys[1]];
+                initialDist = Math.hypot(p1.clientX - p2.clientX, p1.clientY - p2.clientY);
+                initialAngle = Math.atan2(p2.clientY - p1.clientY, p2.clientX - p1.clientX);
+                startScale = parseFloat(el.dataset.scale); startRotation = parseFloat(el.dataset.rotate);
+            }
+        });
+        el.addEventListener('pointermove', (e) => {
+            if (!activePointers[e.pointerId]) return;
+            activePointers[e.pointerId] = e;
+            const keys = Object.keys(activePointers);
+            if (keys.length === 1) {
+                const parentRect = document.getElementById('tablet-stage').getBoundingClientRect();
+                el.style.left = (e.clientX - parentRect.left - 40) + 'px';
+                el.style.top = (e.clientY - parentRect.top - 40) + 'px';
+            } else if (keys.length === 2) {
+                const p1 = activePointers[keys[0]], p2 = activePointers[keys[1]];
+                const currentDist = Math.hypot(p1.clientX - p2.clientX, p1.clientY - p2.clientY);
+                const currentAngle = Math.atan2(p2.clientY - p1.clientY, p2.clientX - p1.clientX);
+                const newScale = Math.min(Math.max(startScale * (currentDist / initialDist), 0.3), 3);
+                const newRotation = startRotation + (currentAngle - initialAngle) * (180 / Math.PI);
+                el.dataset.scale = newScale; el.dataset.rotate = newRotation;
+                el.style.transform = `scale(${newScale}) rotate(${newRotation}deg)`;
+            }
+        });
+        el.addEventListener('pointerup', (e) => {
+            delete activePointers[e.pointerId];
+            if (Object.keys(activePointers).length === 0) el.style.zIndex = 10;
+        });
+    }
+</script>
+</body>
+</html>
