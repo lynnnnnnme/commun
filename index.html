@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>社区时光机 - 智慧终端</title>
+    <title>社区时光机 - 智慧协同终端</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <!-- 使用 Socket.io 替代 PeerJS，解决 VPN 环境下的连接问题 -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@500;700;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@500;700;900&family=Klee+One:wght@600&display=swap');
         :root { 
             --primary-green: #8DB5AA; --bg-single: #FDFBF7; --bg-double: #EAE4DD; 
             --pink: #FFADAD; --blue: #A0C4FF; --green: #CAFFBF; --yellow: #FDFFB6;
@@ -16,104 +17,106 @@
         * { margin: 0; padding: 0; box-sizing: border-box; outline: none; }
         body { background: #E8F1EE; height: 100vh; width: 100vw; display: flex; align-items: center; justify-content: center; overflow: hidden; font-family: 'Noto Sans SC', sans-serif; color: #525252; }
 
+        /* 恢复：精致白框容器 */
         #main-stage {
-            position: relative; width: 90vw; height: 94vh; max-width: 500px;
-            background: var(--bg-single); border-radius: 45px; border: 8px solid white;
-            box-shadow: 0 40px 100px rgba(141, 181, 170, 0.1); overflow: hidden;
-            display: flex; flex-direction: column; transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative; width: 92vw; height: 95vh; max-width: 550px;
+            background: var(--bg-single); border-radius: 45px;
+            border: 10px solid white; box-shadow: 0 40px 100px rgba(141, 181, 170, 0.12);
+            overflow: hidden; display: flex; flex-direction: column; transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .ratio-single { aspect-ratio: 3 / 4; background: var(--bg-single) !important; }
-        .ratio-double { aspect-ratio: 3 / 8; background: var(--bg-double) !important; }
+        .view-section { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 30px; text-align: center; }
+        .active-view { display: flex !important; animation: fadeIn 0.6s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
 
-        .view-section { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 25px; text-align: center; }
-        .active-view { display: flex !important; }
-
+        /* 右上角手动保底按钮 */
         #manual-toggle {
             position: absolute; top: 25px; right: 25px; z-index: 2000;
-            width: 40px; height: 40px; background: rgba(255,255,255,0.8);
+            width: 42px; height: 42px; background: rgba(255,255,255,0.7);
             border-radius: 50%; display: flex; align-items: center; justify-content: center;
             cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.05); color: var(--primary-green);
         }
 
+        /* 运行容器：实现 8:3 延伸 */
+        #game-runtime { position: absolute; inset: 0; z-index: 1000; display: none; background: white; }
+        #view-port { width: 100%; height: 100%; overflow: hidden; position: relative; }
+        #game-frame { border: none; position: absolute; left: 0; width: 100%; transition: none; }
+
+        .is-single #game-frame { height: 100%; top: 0; }
+        .is-double.side-top #game-frame { height: 200%; top: 0; transform: rotate(180deg); } /* P2侧 180度倒置 */
+        .is-double.side-bottom #game-frame { height: 200%; top: -100%; }
+
+        /* 彩色卡片 */
         .color-card {
             width: 100%; max-width: 260px; padding: 22px; border-radius: 28px;
             margin-bottom: 15px; background: white; box-shadow: 0 8px 25px rgba(0,0,0,0.03);
-            cursor: pointer; display: flex; flex-direction: column; align-items: center;
+            cursor: pointer; display: flex; flex-direction: column; align-items: center; transition: 0.3s;
         }
         .color-card:active { transform: scale(0.96); }
+        .card-icon { width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; color: white; }
 
-        #game-frame-wrap { position: absolute; inset: 0; overflow: hidden; display: none; background: white; }
-        #game-frame { border: none; position: absolute; top: 0; height: 100%; }
-        .mode-single-active #game-frame { width: 100%; left: 0; }
-        .mode-double-active.side-top #game-frame { width: 200%; left: 0; }
-        .mode-double-active.side-bottom #game-frame { width: 200%; left: -100%; }
-
-        .sync-wait-layer { position: absolute; inset: 0; background: rgba(255,255,255,0.98); z-index: 1500; display: none; flex-direction: column; align-items: center; justify-content: center; }
-        .spinner { width: 40px; height: 40px; border: 4px solid #F0F0F0; border-top: 4px solid var(--primary-green); border-radius: 50%; animation: spin 1s linear infinite; }
+        .sync-layer { position: absolute; inset: 0; background: rgba(255,255,255,0.96); z-index: 1500; display: none; flex-direction: column; align-items: center; justify-content: center; }
+        .spinner { width: 35px; height: 35px; border: 4px solid #f3f3f3; border-top: 4px solid var(--primary-green); border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
 
-        #init-layer, #setup-layer { position: fixed; inset: 0; background: #E8F1EE; z-index: 9000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .btn-ready { background: var(--primary-green); color: white; padding: 14px 50px; border-radius: 50px; font-weight: 900; font-size: 1rem; border: none; cursor: pointer; }
+        #setup-layer { position: fixed; inset: 0; background: #E8F1EE; z-index: 9000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .btn-ready { background: var(--primary-green); color: white; padding: 14px 45px; border-radius: 50px; font-weight: 900; font-size: 0.95rem; border: none; cursor: pointer; }
         .reset-link { margin-top: 20px; font-size: 0.65rem; font-weight: 900; color: #BBB; text-decoration: underline; cursor: pointer; }
     </style>
 </head>
 <body>
 
-    <div id="init-layer">
+    <div id="setup-layer">
         <div class="mb-8 text-[#8DB5AA] animate-pulse"><i data-lucide="power" size="52"></i></div>
-        <button onclick="startSystem()" class="btn-ready">开启终端</button>
+        <h1 class="text-xl font-black mb-10 tracking-[0.2em]">智慧终端已就绪</h1>
+        <button onclick="startSetup()" class="btn-ready">开启终端</button>
     </div>
 
-    <div id="setup-layer" style="display:none;">
-        <h2 class="text-lg font-black mb-10 text-stone-500">此屏幕的位置是？</h2>
-        <div class="flex flex-col gap-4 w-64">
-            <button onclick="saveSide('top')" class="btn-ready">左/上半屏 (P2侧)</button>
-            <button onclick="saveSide('bottom')" class="btn-ready" style="background:#7B8A8E">右/下半屏 (P1侧)</button>
+    <div id="side-select-layer" class="fixed inset-0 bg-[#E8F1EE] z-[8500] hidden flex-col items-center justify-center">
+        <h2 class="text-lg font-black mb-10 text-stone-500">配置屏幕物理位置</h2>
+        <div class="flex flex-col gap-5 w-64">
+            <button onclick="saveSide('top')" class="btn-ready">上半屏 (P2侧)</button>
+            <button onclick="saveSide('bottom')" class="btn-ready" style="background:#7B8A8E">下半屏 (P1侧)</button>
         </div>
-        <p class="mt-8 text-[0.6rem] text-stone-400 text-center px-10 leading-relaxed">角色分配后将实现自动联机<br>建议两台设备连接同一 Wi-Fi</p>
     </div>
 
-    <div id="main-stage" class="ratio-single">
+    <div id="main-stage">
         <div id="manual-toggle" onclick="toggleModeManual()"><i data-lucide="refresh-cw"></i></div>
 
-        <!-- 联机等待层 -->
-        <div id="sync-wait" class="sync-wait-layer">
-            <div class="spinner mb-6"></div>
-            <p id="wait-msg" class="text-sm font-black text-stone-500">正在与邻居同步画面...</p>
-            <p id="debug-id" class="mt-4 text-[10px] font-mono text-stone-300"></p>
-            <button onclick="cancelLaunch()" class="mt-8 text-xs font-bold text-stone-300 underline">取消</button>
+        <div id="sync-wait" class="sync-layer">
+            <div class="spinner mb-4"></div>
+            <p class="text-xs font-black text-stone-400 text-center px-10">正在同步画面...<br>请确保两台设备均在 Vercel 链接中</p>
         </div>
 
-        <!-- 单人模式 -->
         <div id="view-single" class="view-section active-view">
-            <h2 class="font-black mb-8 text-stone-300 tracking-[0.3em] text-[0.65rem]">个人探索模式</h2>
+            <h2 class="font-black mb-8 text-stone-300 tracking-[0.2em] text-[0.6rem] uppercase">Personal Discovery</h2>
             <div class="color-card" onclick="launch('single-htp')" style="border-bottom: 5px solid var(--pink)">
-                <p class="font-black text-sm">房树人心理绘测</p>
+                <div class="card-icon" style="background:var(--pink)"><i data-lucide="palette" size="20"></i></div>
+                <p class="font-black text-sm text-center">房树人心理绘测</p>
             </div>
             <div class="color-card" onclick="launch('single-book')" style="border-bottom: 5px solid var(--blue)">
-                <p class="font-black text-sm">社区答案之书</p>
+                <div class="card-icon" style="background:var(--blue)"><i data-lucide="book-open" size="20"></i></div>
+                <p class="font-black text-sm text-center">社区答案之书</p>
             </div>
-            <div class="reset-link" onclick="resetSetup()">重新校准屏幕位置</div>
+            <div class="reset-link" onclick="resetSide()">重新校准位置</div>
         </div>
 
-        <!-- 双人模式 -->
         <div id="view-double" class="view-section">
-            <h2 class="font-black mb-8 text-stone-400 tracking-[0.3em] text-[0.65rem]">双人协作空间</h2>
-            <div class="color-card" onclick="launchDouble('double-cards')" style="border-bottom: 5px solid var(--green)">
-                <p class="font-black text-sm">凑十记忆挑战</p>
-            </div>
+            <h2 class="font-black mb-8 text-stone-400 tracking-[0.2em] text-[0.6rem] uppercase">Cooperative Space</h2>
             <div class="color-card" onclick="launchDouble('double-sand')" style="border-bottom: 5px solid var(--yellow)">
-                <p class="font-black text-sm">社区共创沙盘</p>
+                <div class="card-icon" style="background:var(--yellow); color:#888"><i data-lucide="layout-grid" size="20"></i></div>
+                <p class="font-black text-sm text-center">社区共创沙盘</p>
             </div>
-            <div class="reset-link" onclick="resetSetup()">重新校准屏幕位置</div>
+            <div class="color-card" onclick="launchDouble('double-cards')" style="border-bottom: 5px solid var(--green)">
+                <div class="card-icon" style="background:var(--green)"><i data-lucide="brain" size="20"></i></div>
+                <p class="font-black text-sm text-center">凑十记忆挑战</p>
+            </div>
+            <div class="reset-link" onclick="resetSide()">重新校准位置</div>
         </div>
 
-        <div id="game-runtime" class="view-section !p-0">
-            <div id="game-frame-wrap">
-                <iframe id="game-frame" src=""></iframe>
-            </div>
-            <button class="absolute top-4 left-4 bg-white/90 p-2 rounded-full shadow-md z-[2001]" onclick="exitGame()">
+        <div id="game-runtime">
+            <div id="view-port"><iframe id="game-frame" src=""></iframe></div>
+            <button class="absolute top-4 left-4 bg-white/80 p-2 rounded-full shadow-md z-[2001]" onclick="exitGame()">
                 <i data-lucide="chevron-left" size="20" color="#8DB5AA"></i>
             </button>
         </div>
@@ -122,38 +125,40 @@
     <script>
         lucide.createIcons();
 
+        // 使用 Socket.io 公共中继服务器（此处为一个示例公共服务器，建议之后替换为您自己的 Render/Heroku 服务器）
+        const socket = io('https://socket-io-chat.now.sh/', { autoConnect: false }); 
+        
         let mySide = localStorage.getItem('tm_side');
         let currentMode = 'single';
         let isRunning = false;
-        let peer = null, conn = null;
 
-        function startSystem() {
-            document.getElementById('init-layer').style.display = 'none';
-            if (!mySide) document.getElementById('setup-layer').style.display = 'flex';
-            else activateTerminal();
+        function startSetup() {
+            document.getElementById('setup-layer').style.display = 'none';
+            if (!mySide) document.getElementById('side-select-layer').style.display = 'flex';
+            else initSensors();
         }
 
         function saveSide(side) {
             localStorage.setItem('tm_side', side);
             mySide = side;
-            document.getElementById('setup-layer').style.display = 'none';
-            activateTerminal();
+            document.getElementById('side-select-layer').style.display = 'none';
+            initSensors();
         }
 
-        function resetSetup() {
+        function resetSide() {
             localStorage.removeItem('tm_side');
             location.reload();
         }
 
-        async function activateTerminal() {
+        async function initSensors() {
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
                 try { await DeviceOrientationEvent.requestPermission(); } catch(e){}
             }
             window.addEventListener('deviceorientation', (e) => {
                 if (isRunning) return;
-                const beta = Math.abs(e.beta), gamma = Math.abs(e.gamma);
-                if (beta < 15 && gamma < 15) setMode('double');
-                else if (beta > 35) setMode('single');
+                const b = Math.abs(e.beta), g = Math.abs(e.gamma);
+                if (b < 15 && g < 15) setMode('double');
+                else if (b > 35) setMode('single');
             });
             updateUI();
         }
@@ -165,6 +170,7 @@
         }
 
         function toggleModeManual() {
+            if (isRunning) return;
             setMode(currentMode === 'single' ? 'double' : 'single');
         }
 
@@ -172,120 +178,54 @@
             document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active-view'));
             const stage = document.getElementById('main-stage');
             if (currentMode === 'single') {
-                stage.className = 'ratio-single';
+                stage.style.background = "var(--bg-single)";
                 document.getElementById('view-single').classList.add('active-view');
             } else {
-                stage.className = 'ratio-double';
+                stage.style.background = "var(--bg-double)";
                 document.getElementById('view-double').classList.add('active-view');
             }
             document.getElementById('manual-toggle').style.display = isRunning ? 'none' : 'flex';
         }
 
-        // --- 核心：工业级 P2P 联动 ---
+        // --- 核心 Socket 同步逻辑 ---
         function launchDouble(gameId) {
             document.getElementById('sync-wait').style.display = 'flex';
-            document.getElementById('wait-msg').innerText = "寻找邻居中...";
-            startNetwork(gameId);
-        }
-
-        function startNetwork(gameId) {
-            if (peer) peer.destroy();
-            
-            // 每一个终端使用极其特殊的后缀，避免全球冲突
-            const UNIQUE_KEY = "COMMUNITY-TIME-MACHINE-V12";
-            const myPeerId = `${UNIQUE_KEY}-${mySide}`;
-            const targetPeerId = `${UNIQUE_KEY}-${mySide === 'top' ? 'bottom' : 'top'}`;
-            document.getElementById('debug-id').innerText = `MY_ID: ${mySide.toUpperCase()}`;
-
-            // 配置 Google 公共 STUN 服务器，大幅提高联网成功率
-            peer = new Peer(myPeerId, {
-                config: {
-                    'iceServers': [
-                        { url: 'stun:stun.l.google.com:19302' },
-                        { url: 'stun:stun1.l.google.com:19302' }
-                    ]
-                }
-            });
-
-            peer.on('open', () => {
-                // 持续尝试连接邻居
-                const connector = setInterval(() => {
-                    if (conn || !peer || peer.destroyed) { clearInterval(connector); return; }
-                    
-                    const attempt = peer.connect(targetPeerId, { reliable: true });
-                    setupConn(attempt, gameId);
-                }, 2000);
-            });
-
-            peer.on('connection', (c) => {
-                if (conn) return;
-                conn = c;
-                setupConn(c, gameId);
-            });
-
-            peer.on('error', (err) => {
-                if(err.type === 'unavailable-id') {
-                    // ID 冲突，通常是刷新过快导致旧连接没断，5秒后重试
-                    setTimeout(() => startNetwork(gameId), 5000);
-                }
-            });
-        }
-
-        function setupConn(connection, gameId) {
-            connection.on('open', () => {
-                conn = connection;
-                document.getElementById('wait-msg').innerText = "联机成功！";
-                if (gameId) conn.send({ type: 'LAUNCH', gameId: gameId });
-            });
-
-            connection.on('data', (data) => {
-                if (data.type === 'LAUNCH') doLaunch(data.gameId);
-                if (data.type === 'EXIT') doExit();
-                if (data.type === 'SYNC') {
+            if(!socket.connected) {
+                socket.connect();
+                socket.on('control', (data) => {
+                    if(data.type === 'LAUNCH') doLaunch(data.gameId);
+                    if(data.type === 'EXIT') doExit();
+                });
+                socket.on('sync_action', (data) => {
                     const frame = document.getElementById('game-frame').contentWindow;
-                    frame.postMessage({ type: 'APPLY_SYNC', data: data.payload }, '*');
-                }
-            });
-
-            connection.on('close', () => { 
-                conn = null; 
-                if(isRunning) exitGame(); 
-            });
+                    frame.postMessage({ type: 'APPLY_SYNC', data: data }, '*');
+                });
+            }
+            socket.emit('control', { type: 'LAUNCH', gameId: gameId });
+            doLaunch(gameId);
         }
 
         window.addEventListener('message', (e) => {
-            if (e.data.type === 'GAME_SYNC' && conn && conn.open) {
-                conn.send({ type: 'SYNC', payload: e.data.payload });
+            if (e.data.type === 'GAME_SYNC' && socket.connected) {
+                socket.emit('sync_action', e.data.payload);
             }
         });
 
-        function cancelLaunch() {
-            document.getElementById('sync-wait').style.display = 'none';
-            if (peer) { peer.destroy(); peer = null; }
-            conn = null;
-        }
+        function launch(id) { doLaunch(id); }
 
-        function launch(gameId) { doLaunch(gameId); }
-
-        function doLaunch(gameId) {
+        function doLaunch(id) {
             isRunning = true;
             document.getElementById('sync-wait').style.display = 'none';
             const frame = document.getElementById('game-frame');
-            const wrap = document.getElementById('game-frame-wrap');
-            
-            const urls = {
-                'single-htp': 'htp_latest.html', 'single-book': 'book_of_answers.html',
-                'double-cards': 'make_ten.html', 'double-sand': 'sandtray.html'
-            };
-            
-            frame.src = urls[gameId];
+            const port = document.getElementById('view-port');
+            frame.src = id + '.html'; 
             document.getElementById('game-runtime').style.display = 'block';
-            wrap.className = (currentMode === 'single' ? 'mode-single-active' : 'mode-double-active') + ` side-${mySide}`;
-            updateUI();
+            const isD = id.includes('double');
+            port.className = (isD ? 'is-double ' : 'is-single ') + `side-${mySide}`;
         }
 
         function exitGame() {
-            if (conn) conn.send({ type: 'EXIT' });
+            if (socket.connected) socket.emit('control', { type: 'EXIT' });
             doExit();
         }
 
@@ -293,8 +233,7 @@
             isRunning = false;
             document.getElementById('game-runtime').style.display = 'none';
             document.getElementById('game-frame').src = "";
-            if (peer) { peer.destroy(); peer = null; }
-            conn = null;
+            if(socket.connected) socket.disconnect();
             updateUI();
         }
     </script>
