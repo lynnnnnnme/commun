@@ -3,103 +3,150 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>社区时光机 - 智慧联动终端</title>
+    <title>智慧终端</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- 引入 Socket.io 客户端 -->
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@500;700;900&family=Klee+One:wght@600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@500;700;900&display=swap');
+        
         :root { 
-            --primary-green: #8DB5AA; --bg-single: #FDFBF7; --bg-double: #EAE4DD; 
+            --primary-green: #8DB5AA; 
             --pink: #FFADAD; --blue: #A0C4FF; --green: #CAFFBF; --yellow: #FDFFB6;
         }
+        
         * { margin: 0; padding: 0; box-sizing: border-box; outline: none; }
-        body { background: #E8F1EE; height: 100vh; width: 100vw; display: flex; align-items: center; justify-content: center; overflow: hidden; font-family: 'Noto Sans SC', sans-serif; color: #525252; }
+        html, body { width: 100%; height: 100%; background: #E8F1EE; overflow: hidden; font-family: 'Noto Sans SC', sans-serif; }
 
-        /* 外观：精致白框 4:3 容器 */
+        /* 主容器 */
         #main-stage {
-            position: relative; width: 92vw; height: 95vh; max-width: 550px;
-            background: var(--bg-single); border-radius: 45px;
-            border: 10px solid white; box-shadow: 0 40px 100px rgba(141, 181, 170, 0.12);
-            overflow: hidden; display: flex; flex-direction: column; transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: #FDFBF7;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
 
-        .view-section { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 30px; text-align: center; }
+        /* 菜单视图层 */
+        .view-section { 
+            position: absolute; 
+            inset: 0; 
+            display: none; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            padding: 20px; 
+            text-align: center;
+            background: #FDFBF7;
+            z-index: 100;
+        }
         .active-view { display: flex !important; }
 
-        /* 右上角保底切换 */
+        /* 双人模式背景色调 */
+        .mode-double-ui { background: #EAE4DD !important; }
+
+        /* 切换按钮 */
         #manual-toggle {
-            position: absolute; top: 25px; right: 25px; z-index: 2000;
-            width: 44px; height: 44px; background: rgba(255,255,255,0.7);
-            border-radius: 50%; display: flex; align-items: center; justify-content: center;
-            cursor: pointer; color: var(--primary-green);
+            position: absolute; 
+            top: 20px; 
+            right: 20px; 
+            z-index: 2000;
+            width: 44px; 
+            height: 44px; 
+            background: rgba(255,255,255,0.4);
+            border-radius: 50%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            cursor: pointer;
+            color: var(--primary-green);
         }
 
-        /* 8:3 延伸视角逻辑 */
-        #game-runtime { position: absolute; inset: 0; z-index: 1000; display: none; background: white; }
-        #view-port { width: 100%; height: 100%; overflow: hidden; position: relative; }
-        #game-frame { border: none; position: absolute; left: 0; width: 100%; transition: none; }
+        /* 游戏运行层：始终全屏 */
+        #game-runtime { 
+            position: absolute; 
+            inset: 0; 
+            z-index: 500; 
+            display: none; 
+            background: white; 
+        }
+        #game-frame-wrap { width: 100%; height: 100%; overflow: hidden; position: relative; }
+        iframe { border: none; width: 100%; height: 100%; }
 
-        .is-single #game-frame { height: 100%; top: 0; }
-        .is-double.side-top #game-frame { height: 200%; top: 0; transform: rotate(180deg); } 
-        .is-double.side-bottom #game-frame { height: 200%; top: -100%; }
-
+        /* 彩色卡片 */
         .color-card {
-            width: 100%; max-width: 260px; padding: 22px; border-radius: 28px;
-            margin-bottom: 15px; background: white; box-shadow: 0 8px 25px rgba(0,0,0,0.03);
-            cursor: pointer; display: flex; flex-direction: column; align-items: center;
+            width: 80%; max-width: 280px; padding: 25px; border-radius: 20px;
+            margin-bottom: 15px; background: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+            display: flex; flex-direction: column; align-items: center;
+            cursor: pointer;
         }
+        .card-icon { width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; color: white; }
 
-        .btn-ready { background: var(--primary-green); color: white; padding: 14px 45px; border-radius: 50px; font-weight: 900; border: none; cursor: pointer; }
+        /* 引导层 */
+        #init-layer, #setup-layer { position: fixed; inset: 0; background: #E8F1EE; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .btn-ready { background: var(--primary-green); color: white; padding: 15px 50px; border-radius: 50px; font-weight: 900; border: none; cursor: pointer; }
     </style>
 </head>
 <body>
 
-    <!-- 初始化层 -->
-    <div id="init-layer" class="fixed inset-0 bg-[#E8F1EE] z-[9000] flex flex-col items-center justify-center">
-        <div class="mb-8 text-[#8DB5AA] animate-pulse"><i data-lucide="power" size="52"></i></div>
-        <button onclick="bootSystem()" class="btn-ready">点击开启智慧终端</button>
+    <!-- 1. 点击开启层 -->
+    <div id="init-layer">
+        <button onclick="startSystem()" class="btn-ready">点击开启智慧终端</button>
     </div>
 
-    <!-- 位置层 -->
-    <div id="side-select-layer" class="fixed inset-0 bg-[#E8F1EE] z-[8500] hidden flex flex-col items-center justify-center">
-        <h2 class="text-lg font-black mb-10 text-stone-500">确认屏幕物理位置</h2>
-        <div class="flex flex-col gap-5 w-64">
-            <button onclick="saveSide('top')" class="btn-ready">上半屏 (P2侧)</button>
-            <button onclick="saveSide('bottom')" class="btn-ready" style="background:#7B8A8E">下半屏 (P1侧)</button>
+    <!-- 2. 位置设置层 -->
+    <div id="setup-layer" style="display:none;">
+        <h2 class="text-lg font-black mb-10 text-stone-500">此屏幕的位置是？</h2>
+        <div class="flex flex-col gap-6 w-64">
+            <button onclick="saveSide('left')" class="btn-ready">左侧屏幕</button>
+            <button onclick="saveSide('right')" class="btn-ready" style="background:#7B8A8E">右侧屏幕</button>
         </div>
     </div>
 
+    <!-- 3. 主舞台 -->
     <div id="main-stage">
-        <div id="manual-toggle" onclick="toggleModeManual()"><i data-lucide="refresh-cw"></i></div>
+        
+        <!-- 悬浮切换按钮 -->
+        <div id="manual-toggle" onclick="toggleModeManual()">
+            <i data-lucide="refresh-cw"></i>
+        </div>
 
-        <!-- 单人 -->
+        <!-- 菜单：个人模式 -->
         <div id="view-single" class="view-section active-view">
-            <h2 class="font-black mb-8 text-stone-300 tracking-[0.2em] text-[0.6rem] uppercase">Personal Mode</h2>
-            <div class="color-card" onclick="launch('single-htp')" style="border-bottom: 5px solid var(--pink)">
-                <p class="font-black text-sm">房树人心理绘测</p>
+            <h2 class="font-black mb-10 text-stone-300 tracking-[0.3em] text-[0.6rem]">个人模式</h2>
+            <div class="color-card" onclick="launch('single-htp')" style="border-bottom: 6px solid var(--pink)">
+                <div class="card-icon" style="background:var(--pink)"><i data-lucide="palette"></i></div>
+                <p class="font-black text-sm text-center">房树人心理绘测</p>
             </div>
-            <div class="color-card" onclick="launch('single-book')" style="border-bottom: 5px solid var(--blue)">
-                <p class="font-black text-sm">社区答案之书</p>
-            </div>
-        </div>
-
-        <!-- 双人 (暗底色) -->
-        <div id="view-double" class="view-section">
-            <h2 class="font-black mb-8 text-stone-400 tracking-[0.2em] text-[0.6rem] uppercase">Cooperation Space</h2>
-            <div class="color-card" onclick="launchDouble('double-sand')" style="border-bottom: 5px solid var(--yellow)">
-                <p class="font-black text-sm">共同创作沙盘</p>
-            </div>
-            <div class="color-card" onclick="launchDouble('double-cards')" style="border-bottom: 5px solid var(--green)">
-                <p class="font-black text-sm">凑十记忆挑战</p>
+            <div class="color-card" onclick="launch('single-book')" style="border-bottom: 6px solid var(--blue)">
+                <div class="card-icon" style="background:var(--blue)"><i data-lucide="book-open"></i></div>
+                <p class="font-black text-sm text-center">社区答案之书</p>
             </div>
         </div>
 
+        <!-- 菜单：双人模式 -->
+        <div id="view-double" class="view-section mode-double-ui">
+            <h2 class="font-black mb-10 text-stone-400 tracking-[0.3em] text-[0.6rem]">双人模式</h2>
+            <div class="color-card" onclick="launch('double-cards')" style="border-bottom: 6px solid var(--green)">
+                <div class="card-icon" style="background:var(--green)"><i data-lucide="brain"></i></div>
+                <p class="font-black text-sm text-center">凑十记忆挑战</p>
+            </div>
+            <div class="color-card" onclick="launch('double-sand')" style="border-bottom: 6px solid var(--yellow)">
+                <div class="card-icon" style="background:var(--yellow); color:#888"><i data-lucide="layout-grid"></i></div>
+                <p class="font-black text-sm text-center">社区共创沙盘</p>
+            </div>
+        </div>
+
+        <!-- 全屏运行层 -->
         <div id="game-runtime">
-            <div id="view-port"><iframe id="game-frame" src=""></iframe></div>
-            <button class="absolute top-4 left-4 bg-white/80 p-2 rounded-full shadow-md z-[2001]" onclick="exitGame()">
-                <i data-lucide="chevron-left" size="20" color="#8DB5AA"></i>
+            <div id="game-frame-wrap">
+                <iframe id="game-frame" src=""></iframe>
+            </div>
+            <!-- 返回按钮 -->
+            <button class="absolute top-4 left-4 bg-white/60 p-2 rounded-full z-[2001]" onclick="exitGame()">
+                <i data-lucide="chevron-left" color="#8DB5AA"></i>
             </button>
         </div>
     </div>
@@ -107,34 +154,32 @@
     <script>
         lucide.createIcons();
 
-        // 【重要】将此处修改为您电脑的真实局域网 IP 地址
-        const SERVER_URL = "http://192.168.x.x:3000"; 
-        let socket = null;
         let mySide = localStorage.getItem('tm_side');
-        let currentMode = 'single', isRunning = false;
+        let currentMode = 'single';
+        let isRunning = false;
 
-        function bootSystem() {
+        function startSystem() {
             document.getElementById('init-layer').style.display = 'none';
-            if (!mySide) document.getElementById('side-select-layer').style.display = 'flex';
-            else initSensors();
+            if (!mySide) document.getElementById('setup-layer').style.display = 'flex';
+            else activateTerminal();
         }
 
         function saveSide(side) {
             localStorage.setItem('tm_side', side);
             mySide = side;
-            document.getElementById('side-select-layer').style.display = 'none';
-            initSensors();
+            document.getElementById('setup-layer').style.display = 'none';
+            activateTerminal();
         }
 
-        async function initSensors() {
+        async function activateTerminal() {
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
                 try { await DeviceOrientationEvent.requestPermission(); } catch(e){}
             }
             window.addEventListener('deviceorientation', (e) => {
                 if (isRunning) return;
-                const b = Math.abs(e.beta), g = Math.abs(e.gamma);
-                if (b < 15 && g < 15) setMode('double');
-                else if (b > 35) setMode('single');
+                const beta = Math.abs(e.beta), gamma = Math.abs(e.gamma);
+                if (beta < 15 && gamma < 15) setMode('double');
+                else if (beta > 35) setMode('single');
             });
             updateUI();
         }
@@ -146,64 +191,42 @@
         }
 
         function toggleModeManual() {
-            if (isRunning) return;
             setMode(currentMode === 'single' ? 'double' : 'single');
         }
 
         function updateUI() {
             document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active-view'));
-            const stage = document.getElementById('main-stage');
+            const toggleBtn = document.getElementById('manual-toggle');
+
             if (currentMode === 'single') {
-                stage.style.background = "var(--bg-single)";
                 document.getElementById('view-single').classList.add('active-view');
             } else {
-                stage.style.background = "var(--bg-double)";
                 document.getElementById('view-double').classList.add('active-view');
             }
-            document.getElementById('manual-toggle').style.display = isRunning ? 'none' : 'flex';
+            toggleBtn.style.display = isRunning ? 'none' : 'flex';
         }
 
-        // --- 核心：建立 WebSocket 连接 ---
-        function launchDouble(gameId) {
-            if(!socket) {
-                socket = io(SERVER_URL);
-                socket.on('control', (data) => {
-                    if(data.type === 'LAUNCH') doLaunch(data.gameId);
-                    if(data.type === 'EXIT') doExit();
-                });
-                socket.on('sync_action', (data) => {
-                    document.getElementById('game-frame').contentWindow.postMessage({ type: 'APPLY_SYNC', data: data }, '*');
-                });
-            }
-            socket.emit('control', { type: 'LAUNCH', gameId: gameId });
-            doLaunch(gameId);
-        }
-
-        window.addEventListener('message', (e) => {
-            if (e.data.type === 'GAME_SYNC' && socket) socket.emit('sync_action', e.data.payload);
-        });
-
-        function launch(id) { doLaunch(id); }
-
-        function doLaunch(id) {
+        function launch(gameId) {
             isRunning = true;
             const frame = document.getElementById('game-frame');
-            const port = document.getElementById('view-port');
-            frame.src = id + '.html'; 
-            document.getElementById('game-runtime').style.display = 'block';
-            port.className = (id.includes('double') ? 'is-double ' : 'is-single ') + `side-${mySide}`;
+            const runtime = document.getElementById('game-runtime');
+            
+            const urls = {
+                'single-htp': 'htp_latest.html', 
+                'single-book': 'book_of_answers.html',
+                'double-cards': 'make_ten.html', 
+                'double-sand': 'sandtray.html'
+            };
+            
+            frame.src = urls[gameId];
+            runtime.style.display = 'block';
+            updateUI();
         }
 
         function exitGame() {
-            if (socket) socket.emit('control', { type: 'EXIT' });
-            doExit();
-        }
-
-        function doExit() {
             isRunning = false;
             document.getElementById('game-runtime').style.display = 'none';
             document.getElementById('game-frame').src = "";
-            if(socket) { socket.disconnect(); socket = null; }
             updateUI();
         }
     </script>
